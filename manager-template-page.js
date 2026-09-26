@@ -1,3 +1,4 @@
+import { isTrustedWindowMessage } from './core/template-security.js';
 let context = {
   reportDate: '',
   reportDateDisplay: '',
@@ -6,14 +7,23 @@ let context = {
   infectionTableHtml: '',
 };
 
+const parentOrigin = location.origin;
 const status = document.getElementById('templateFrameStatus');
-function setStatus(message, type='info') {
+
+function setStatus(message, type = 'info') {
+  if (!status) return;
   status.textContent = message;
   status.className = `manager-status ${type}`;
   status.hidden = !message;
 }
 
+function isTrustedParentMessage(event) {
+  return isTrustedWindowMessage(event, parent, parentOrigin);
+}
+
 window.addEventListener('message', event => {
+  if (!isTrustedParentMessage(event)) return;
+
   if (event.data?.type === 'manager-template-context') {
     context = event.data.context || context;
   }
@@ -34,11 +44,11 @@ async function start() {
       getContext: () => context,
     });
     setStatus('', 'info');
-    parent.postMessage({ type: 'manager-template-ready' }, '*');
   } catch (error) {
     console.error('Template editor frame failed:', error);
     setStatus(`Print editor unavailable: ${error.message || String(error)}. The manager Night Memo remains unaffected.`, 'error');
-    parent.postMessage({ type: 'manager-template-ready' }, '*');
+  } finally {
+    parent.postMessage({ type: 'manager-template-ready' }, parentOrigin);
   }
 }
 
@@ -52,6 +62,6 @@ async function printPublishedTemplate() {
     editor.printTemplateObject(template || editor.getDefaultTemplate());
   } catch (error) {
     console.warn('Published template print failed:', error);
-    parent.postMessage({ type: 'manager-template-print-fallback' }, '*');
+    parent.postMessage({ type: 'manager-template-print-fallback' }, parentOrigin);
   }
 }

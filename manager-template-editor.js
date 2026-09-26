@@ -1,4 +1,7 @@
-import { qs, qsa, esc, todayISO, flash } from './app.js';
+import { qs, qsa, esc } from './core/dom.js';
+import { flash } from './core/ui.js';
+import { todayISO } from './core/dates.js';
+import { sanitizeTemplateCss } from './core/template-security.js';
 import {
   getManagerPrintTemplates,
   saveManagerPrintTemplate,
@@ -24,11 +27,7 @@ const TOKEN_LABELS = {
 
 let api = null;
 let bound = false;
-let state = {
-  templates: [],
-  editingTemplate: null,
-  templateMode: 'visual',
-};
+let state = { templates: [], editingTemplate: null, templateMode: 'visual' };
 
 export async function initManagerTemplateEditor(options) {
   api = options;
@@ -40,7 +39,7 @@ export async function initManagerTemplateEditor(options) {
   } catch (error) {
     console.error('Manager template editor unavailable:', error);
     setUnavailableMessage(
-      'The print-template editor could not connect to its Supabase table. The Night Memo and Full Ward Report tabs are still usable. Run the supplied manager-print-template-migration.sql in Supabase, then reload this page.'
+      'The print-template editor could not connect to its Supabase table. The Night Memo and Full Ward Report tabs are still usable.'
     );
     disableTemplateActions(true);
     return false;
@@ -55,11 +54,11 @@ function bindEditor() {
   qs('#publishTemplateBtn').onclick = publishTemplate;
   qs('#previewTemplateBtn').onclick = previewCurrentTemplate;
 
-  qsa('[data-template-mode]').forEach(b => {
-    b.onclick = () => setTemplateMode(b.dataset.templateMode);
+  qsa('[data-template-mode]').forEach(button => {
+    button.onclick = () => setTemplateMode(button.dataset.templateMode);
   });
-  qsa('#templateToolbar [data-cmd]').forEach(b => {
-    b.onclick = () => runEditorCommand(b.dataset.cmd);
+  qsa('#templateToolbar [data-cmd]').forEach(button => {
+    button.onclick = () => runEditorCommand(button.dataset.cmd);
   });
 
   qs('#templateBlockFormat').onchange = event => {
@@ -67,7 +66,6 @@ function bindEditor() {
     editor.focus();
     document.execCommand('formatBlock', false, event.target.value);
   };
-
   qs('#insertTemplateToken').onchange = event => {
     if (event.target.value) insertToken(event.target.value);
     event.target.value = '';
@@ -75,35 +73,31 @@ function bindEditor() {
 }
 
 function setUnavailableMessage(message) {
-  // The template editor runs inside manager-template.html in its own iframe.
-  // Do not look for the parent manager page's [data-manager-page="template"]
-  // element here; it does not exist inside this document.
-  let el = document.getElementById('templateFrameStatus')
-    || document.getElementById('templateEditorStatusMessage');
-
+  let el = document.getElementById('templateFrameStatus') || document.getElementById('templateEditorStatusMessage');
   if (!el) {
     el = document.createElement('div');
     el.id = 'templateEditorStatusMessage';
     el.className = 'manager-status error template-editor-status';
-
     const host = document.querySelector('.template-frame-main') || document.body;
     host.insertBefore(el, host.firstChild || null);
   }
-
   el.textContent = message || '';
-  el.classList.toggle('error', !!message);
+  el.classList.toggle('error', Boolean(message));
   el.hidden = !message;
 }
 
 function disableTemplateActions(disabled) {
   ['#saveTemplateBtn', '#publishTemplateBtn', '#previewTemplateBtn', '#newTemplateBtn']
-    .forEach(sel => { const el = qs(sel); if (el) el.disabled = disabled; });
+    .forEach(selector => {
+      const el = qs(selector);
+      if (el) el.disabled = disabled;
+    });
 }
 
 async function refreshTemplateList(selectId = null) {
   state.templates = await getManagerPrintTemplates();
-  const sel = qs('#templateSelect');
-  sel.innerHTML = state.templates
+  const select = qs('#templateSelect');
+  select.innerHTML = state.templates
     .map(t => `<option value="${esc(t.id)}">v${esc(t.version)} - ${esc(t.name || 'Night Memo')} - ${esc(t.status)}</option>`)
     .join('');
 
@@ -114,7 +108,7 @@ async function refreshTemplateList(selectId = null) {
     || '';
 
   if (chosen && state.templates.some(t => t.id === chosen)) {
-    sel.value = chosen;
+    select.value = chosen;
     selectTemplate(chosen);
   } else {
     newTemplateDraft(false);
@@ -122,15 +116,15 @@ async function refreshTemplateList(selectId = null) {
 }
 
 function selectTemplate(id) {
-  const t = state.templates.find(x => x.id === id);
-  if (!t) return;
-  state.editingTemplate = { ...t };
-  qs('#templateName').value = t.name || 'Night Memo';
-  qs('#templateEffectiveFrom').value = t.effective_from || todayISO();
-  qs('#templateStatus').textContent = (t.status || 'draft').toUpperCase();
-  qs('#templateHtmlEditor').value = t.html_template || DEFAULT_TEMPLATE_HTML;
-  qs('#templateCssEditor').value = t.css_template || '';
-  setVisualEditorFromTemplate(t.html_template || DEFAULT_TEMPLATE_HTML);
+  const template = state.templates.find(item => item.id === id);
+  if (!template) return;
+  state.editingTemplate = { ...template };
+  qs('#templateName').value = template.name || 'Night Memo';
+  qs('#templateEffectiveFrom').value = template.effective_from || todayISO();
+  qs('#templateStatus').textContent = (template.status || 'draft').toUpperCase();
+  qs('#templateHtmlEditor').value = template.html_template || DEFAULT_TEMPLATE_HTML;
+  qs('#templateCssEditor').value = template.css_template || '';
+  setVisualEditorFromTemplate(template.html_template || DEFAULT_TEMPLATE_HTML);
 }
 
 function newTemplateDraft(showPage = true) {
@@ -161,13 +155,13 @@ function setTemplateMode(mode) {
     setVisualEditorFromTemplate(qs('#templateHtmlEditor').value || DEFAULT_TEMPLATE_HTML);
   }
   state.templateMode = mode;
-  qsa('[data-template-mode]').forEach(b => b.classList.toggle('active', b.dataset.templateMode === mode));
+  qsa('[data-template-mode]').forEach(button => button.classList.toggle('active', button.dataset.templateMode === mode));
   qs('#visualEditorPane').classList.toggle('active', mode === 'visual');
   qs('#htmlEditorPane').classList.toggle('active', mode === 'html');
 }
 
 function templateToEditorHtml(html) {
-  return String(html || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (match, token) => (
+  return String(html || '').replace(/\{\{([a-z0-9_]+)\}\}/gi, (_match, token) => (
     `<span class="template-token" data-token="${esc(token)}" contenteditable="false">${esc(TOKEN_LABELS[token] || token)}</span>`
   ));
 }
@@ -178,70 +172,87 @@ function setVisualEditorFromTemplate(html) {
 
 function visualEditorToTemplate() {
   const clone = qs('#templateVisualEditor').cloneNode(true);
-  clone.querySelectorAll('.template-token').forEach(n => {
-    n.replaceWith(document.createTextNode(`{{${n.dataset.token}}}`));
+  clone.querySelectorAll('.template-token').forEach(node => {
+    node.replaceWith(document.createTextNode(`{{${node.dataset.token}}}`));
   });
   return sanitizeTemplateHtml(clone.innerHTML);
 }
 
-function runEditorCommand(cmd) {
+function runEditorCommand(command) {
   const editor = qs('#templateVisualEditor');
   editor.focus();
-  document.execCommand(cmd, false, null);
+  document.execCommand(command, false, null);
 }
 
 function insertToken(token) {
   const editor = qs('#templateVisualEditor');
   editor.focus();
-  const el = document.createElement('span');
-  el.className = token === 'page_break' ? 'template-token template-token-block' : 'template-token';
-  el.dataset.token = token;
-  el.contentEditable = 'false';
-  el.textContent = TOKEN_LABELS[token] || token;
-  insertNodeAtSelection(el);
+  const element = document.createElement('span');
+  element.className = token === 'page_break' ? 'template-token template-token-block' : 'template-token';
+  element.dataset.token = token;
+  element.contentEditable = 'false';
+  element.textContent = TOKEN_LABELS[token] || token;
+  insertNodeAtSelection(element);
 }
 
 function insertNodeAtSelection(node) {
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount) {
-    const range = sel.getRangeAt(0);
+  const selection = window.getSelection();
+  if (selection?.rangeCount) {
+    const range = selection.getRangeAt(0);
     const editor = qs('#templateVisualEditor');
     if (editor.contains(range.commonAncestorContainer)) {
       range.deleteContents();
       range.insertNode(node);
       range.setStartAfter(node);
       range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
+      selection.removeAllRanges();
+      selection.addRange(range);
       return;
     }
   }
   qs('#templateVisualEditor').appendChild(node);
 }
 
-function sanitizeTemplateHtml(raw) {
+export function sanitizeTemplateHtml(raw) {
   const doc = new DOMParser().parseFromString(`<div id="root">${raw || ''}</div>`, 'text/html');
   const root = doc.querySelector('#root');
-  root.querySelectorAll('script,iframe,object,embed,link,meta,form,input,button,textarea,select').forEach(n => n.remove());
-  root.querySelectorAll('*').forEach(el => {
-    [...el.attributes].forEach(attr => {
-      const name = attr.name.toLowerCase();
-      const value = attr.value || '';
-      if (name.startsWith('on') || name === 'srcdoc' || (name === 'href' && /^\s*javascript:/i.test(value))) {
-        el.removeAttribute(attr.name);
+  const allowedTags = new Set([
+    'DIV', 'P', 'SPAN', 'SECTION', 'ARTICLE', 'HEADER', 'FOOTER',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BR', 'HR',
+    'STRONG', 'B', 'EM', 'I', 'U', 'SMALL',
+    'UL', 'OL', 'LI', 'DL', 'DT', 'DD',
+    'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'COLGROUP', 'COL',
+  ]);
+  const dropWithContent = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM']);
+  const globalAttrs = new Set(['class', 'id', 'style', 'title']);
+  const tableAttrs = new Set(['colspan', 'rowspan', 'scope']);
+
+  [...root.querySelectorAll('*')].forEach(element => {
+    if (!allowedTags.has(element.tagName)) {
+      if (dropWithContent.has(element.tagName)) element.remove();
+      else element.replaceWith(...element.childNodes);
+      return;
+    }
+
+    [...element.attributes].forEach(attribute => {
+      const name = attribute.name.toLowerCase();
+      const allowed = globalAttrs.has(name)
+        || ((element.tagName === 'TD' || element.tagName === 'TH') && tableAttrs.has(name));
+      if (!allowed || name.startsWith('on') || name === 'srcdoc' || name === 'contenteditable' || name === 'data-token') {
+        element.removeAttribute(attribute.name);
       }
-      if (name === 'contenteditable' || name === 'data-token') el.removeAttribute(attr.name);
     });
+
+    if (element.hasAttribute('style')) {
+      const cleanStyle = sanitizeTemplateCss(element.getAttribute('style'));
+      if (cleanStyle.trim()) element.setAttribute('style', cleanStyle);
+      else element.removeAttribute('style');
+    }
   });
   return root.innerHTML;
 }
 
-function sanitizeTemplateCss(css) {
-  return String(css || '')
-    .replace(/@import[^;]+;?/gi, '')
-    .replace(/expression\s*\([^)]*\)/gi, '')
-    .replace(/url\s*\(\s*['"]?\s*javascript:[^)]+\)/gi, '');
-}
+export { sanitizeTemplateCss };
 
 function currentTemplatePayload() {
   const html = state.templateMode === 'visual'
@@ -284,20 +295,20 @@ async function publishTemplate() {
 }
 
 function renderTemplateHtml(templateHtml) {
-  const ctx = api?.getContext?.() || {};
-  let out = sanitizeTemplateHtml(templateHtml || DEFAULT_TEMPLATE_HTML);
+  const context = api?.getContext?.() || {};
+  let output = sanitizeTemplateHtml(templateHtml || DEFAULT_TEMPLATE_HTML);
   const replacements = {
-    report_date_display: ctx.reportDateDisplay || '',
-    report_date: ctx.reportDate || '',
-    section: ctx.section || '',
-    ward_summary_table: ctx.wardSummaryTableHtml || '',
-    infection_table: ctx.infectionTableHtml || '',
+    report_date_display: context.reportDateDisplay || '',
+    report_date: context.reportDate || '',
+    section: context.section || '',
+    ward_summary_table: context.wardSummaryTableHtml || '',
+    infection_table: context.infectionTableHtml || '',
     page_break: '<div class="manager-page-break"></div>',
   };
   for (const [key, value] of Object.entries(replacements)) {
-    out = out.split(`{{${key}}}`).join(value);
+    output = output.split(`{{${key}}}`).join(value);
   }
-  return out.replace(/\{\{[a-z0-9_]+\}\}/gi, '');
+  return output.replace(/\{\{[a-z0-9_]+\}\}/gi, '');
 }
 
 function openTemplateWindow(template, autoPrint = false, title = 'Night Memo Preview') {
@@ -306,12 +317,20 @@ function openTemplateWindow(template, autoPrint = false, title = 'Night Memo Pre
     flash('Pop-up blocked. Allow pop-ups to preview or print.', 'error');
     return;
   }
+
   const shellCss = new URL('./css/legacy-shell.css', location.href).href;
   const managerCss = new URL('./css/manager.css', location.href).href;
   const printCss = new URL('./css/print.css', location.href).href;
   const extraCss = sanitizeTemplateCss(template.css_template || '');
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><link rel="stylesheet" href="${shellCss}"><link rel="stylesheet" href="${managerCss}"><link rel="stylesheet" href="${printCss}"><style>${extraCss}</style></head><body class="legacy-page manager-template-output"><main class="manager-template-page">${renderTemplateHtml(template.html_template)}</main>${autoPrint ? '<script>setTimeout(()=>window.print(),600)<\/script>' : ''}</body></html>`);
+  const bodyHtml = renderTemplateHtml(template.html_template);
+
+  // Never interpolate editable CSS into a style tag. Create the style node and
+  // assign textContent after parsing so closing-style markup cannot escape it.
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><link rel="stylesheet" href="${shellCss}"><link rel="stylesheet" href="${managerCss}"><link rel="stylesheet" href="${printCss}"><style id="template-extra-css"></style></head><body class="legacy-page manager-template-output"><main class="manager-template-page">${bodyHtml}</main></body></html>`);
   win.document.close();
+  const styleNode = win.document.getElementById('template-extra-css');
+  if (styleNode) styleNode.textContent = extraCss;
+  if (autoPrint) win.setTimeout(() => win.print(), 600);
 }
 
 function previewCurrentTemplate() {

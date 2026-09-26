@@ -1,0 +1,158 @@
+import { DB_MODE, supabase } from '../client.js';
+import { demoRead, demoWrite, uid } from '../demo-state.js';
+import { dateInRange, defaultReportDate } from '../range.js';
+import { addDaysISO } from '../../core/dates.js';
+import { recordAudit } from './audit-repository.js';
+
+export async function getAllWards() {
+  if (DB_MODE === 'demo') return demoRead().wards.slice().sort((a, b) => a.display_order - b.display_order);
+  const { data, error } = await supabase.from('wards').select('*').order('display_order').order('code');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getWardById(wardId) {
+  if (DB_MODE === 'demo') return demoRead().wards.find(w => w.id === wardId) || null;
+  const { data, error } = await supabase.from('wards').select('*').eq('id', wardId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getWardByCode(code) {
+  if (DB_MODE === 'demo') return demoRead().wards.find(w => w.code.toLowerCase() === String(code).toLowerCase()) || null;
+  const { data, error } = await supabase.from('wards').select('*').ilike('code', code).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getOperatingPeriods(wardId = null) {
+  if (DB_MODE === 'demo') {
+    return demoRead().operating_periods
+      .filter(x => !wardId || x.ward_id === wardId)
+      .sort((a, b) => b.start_date.localeCompare(a.start_date));
+  }
+  let query = supabase.from('ward_operating_periods').select('*').order('start_date', { ascending: false });
+  if (wardId) query = query.eq('ward_id', wardId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getWardsForDate(date = defaultReportDate(), section = null) {
+  const [wards, periods] = await Promise.all([getAllWards(), getOperatingPeriods()]);
+  return wards.filter(ward => {
+    const open = periods.some(period => period.ward_id === ward.id && dateInRange(date, period.start_date, period.end_date));
+    return open && (!section || ward.manager_section === section);
+  }).sort((a, b) => a.display_order - b.display_order);
+}
+
+export async function isWardOperational(wardId, date = defaultReportDate()) {
+  const periods = await getOperatingPeriods(wardId);
+  return periods.some(period => dateInRange(date, period.start_date, period.end_date));
+}
+
+export async function getCapacityHistory(wardId) {
+  if (DB_MODE === 'demo') return demoRead().capacity_history.filter(x => x.ward_id === wardId).sort((a, b) => b.effective_from.localeCompare(a.effective_from));
+  const { data, error } = await supabase.from('ward_capacity_history').select('*').eq('ward_id', wardId).order('effective_from', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getWardCapacity(wardId, date = defaultReportDate()) {
+  const rows = await getCapacityHistory(wardId);
+  return rows.find(x => dateInRange(date, x.effective_from, x.effective_to))?.bed_capacity ?? null;
+}
+
+export async function createWard(config) {
+  const now = new Date().toISOString();
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    if (state.wards.some(w => w.code.toLowerCase() === config.code.toLowerCase())) throw new Error('Ward code already exists.');
+    const ward = {
+      id: uid('ward'), code: config.code.toUpperCase(), display_name: config.display_name || `Ward ${config.code.toUpperCase()}`,
+      phone: config.phone, fax: config.fax, empty_bed_gender_mode: config.empty_bed_gender_mode || 'male',
+      manager_section: config.manager_section || 'Male', display_order: Number(config.display_order) || 999,
+      active: true, created_at: now, updated_at: now,
+    };
+    state.wards.push(ward);
+    state.operating_periods.push({ id: uid('op'), ward_id: ward.id, start_date: config.start_date, end_date: config.end_date || null, note: config.note || 'Ward opened' });
+    state.capacity_history.push({ id: uid('cap'), ward_id: ward.id, effective_from: config.start_date, effective_to: null, bed_capacity: Number(config.bed_capacity) || 0, note: 'Initial capacity' });
+    state.audit_log.unshift({ id: uid('audit'), occurred_at: now, action: 'ward.create', entity_type: 'ward', entity_id: ward.id, details: { code: ward.code } });
+    demoWrite(state);
+    return ward;
+  }
+  const { data: ward, error } = await supabase.from('wards').insert({
+    code: config.code.toUpperCase(), display_name: config.display_name, phone: config.phone, fax: config.fax,
+    empty_bed_gender_mode: config.empty_bed_gender_mode, manager_section: config.manager_section,
+    display_order: Number(config.display_order) || 999, active: true,
+  }).select().single();
+  if (error) throw error;
+  const { error: periodError } = await supabase.from('ward_operating_periods').insert({ ward_id: ward.id, start_date: config.start_date, end_date: config.end_date || null, note: config.note || 'Ward opened' });
+  if (periodError) throw periodError;
+  const { error: capacityError } = await supabase.from('ward_capacity_history').insert({ ward_id: ward.id, effective_from: config.start_date, bed_capacity: Number(config.bed_capacity), note: 'Initial capacity' });
+  if (capacityError) throw capacityError;
+  await recordAudit('ward.create', 'ward', ward.id, { code: ward.code });
+  return ward;
+}
+
+export async function updateWard(wardId, patch) {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const ward = state.wards.find(x => x.id === wardId);
+    Object.assign(ward, patch, { updated_at: new Date().toISOString() });
+    demoWrite(state);
+    return ward;
+  }
+  const { data, error } = await supabase.from('wards').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', wardId).select().single();
+  if (error) throw error;
+  await recordAudit('ward.update', 'ward', wardId, patch);
+  return data;
+}
+
+export async function addOperatingPeriod(wardId, startDate, endDate = null, note = 'Ward reopened') {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const row = { id: uid('op'), ward_id: wardId, start_date: startDate, end_date: endDate || null, note };
+    state.operating_periods.push(row);
+    demoWrite(state);
+    return row;
+  }
+  const { data, error } = await supabase.from('ward_operating_periods').insert({ ward_id: wardId, start_date: startDate, end_date: endDate || null, note }).select().single();
+  if (error) throw error;
+  await recordAudit('ward.period.add', 'ward', wardId, { startDate, endDate, note });
+  return data;
+}
+
+export async function closeOperatingPeriod(periodId, endDate, note = 'Ward closed') {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const period = state.operating_periods.find(x => x.id === periodId);
+    if (period) { period.end_date = endDate; period.note = note; }
+    demoWrite(state);
+    return period;
+  }
+  const { data, error } = await supabase.from('ward_operating_periods').update({ end_date: endDate, note }).eq('id', periodId).select().single();
+  if (error) throw error;
+  await recordAudit('ward.period.close', 'ward_period', periodId, { endDate, note });
+  return data;
+}
+
+export async function addCapacity(wardId, effectiveFrom, bedCapacity, note = 'Capacity changed') {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const current = state.capacity_history
+      .filter(x => x.ward_id === wardId && x.effective_from < effectiveFrom && (!x.effective_to || x.effective_to >= effectiveFrom))
+      .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+    if (current) {
+      current.effective_to = addDaysISO(effectiveFrom, -1);
+    }
+    const row = { id: uid('cap'), ward_id: wardId, effective_from: effectiveFrom, effective_to: null, bed_capacity: Number(bedCapacity), note };
+    state.capacity_history.push(row);
+    demoWrite(state);
+    return row;
+  }
+  const { error } = await supabase.rpc('add_ward_capacity', { p_ward_id: wardId, p_effective_from: effectiveFrom, p_bed_capacity: Number(bedCapacity), p_note: note });
+  if (error) throw error;
+  await recordAudit('ward.capacity.add', 'ward', wardId, { effectiveFrom, bedCapacity, note });
+  return true;
+}

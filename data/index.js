@@ -1,0 +1,15 @@
+export { DB_MODE, supabase } from './client.js';
+export { ensureDemoState, resetDemoDatabase } from './demo-state.js';
+export { getCurrentAccess } from './repositories/access-repository.js';
+export {
+  getAllWards, getWardById, getWardByCode, getOperatingPeriods, getWardsForDate,
+  isWardOperational, getCapacityHistory, getWardCapacity, createWard, updateWard,
+  addOperatingPeriod, closeOperatingPeriod, addCapacity,
+} from './repositories/ward-repository.js';
+export { getWardStaff, saveWardStaff, setStaffActive } from './repositories/staff-repository.js';
+export { getReportItems, saveReportItem } from './repositories/report-item-repository.js';
+export { getWardReport, getReportsForDate, getRecentReports, getPreviousReport, upsertWardReport } from './repositories/report-repository.js';
+export { getAccounts, adminAccount } from './repositories/account-repository.js';
+export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
+export { getNightBundle } from './legacy-aggregates.js';
+export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
