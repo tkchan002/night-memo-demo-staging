@@ -5,7 +5,7 @@ export const CONFIG = {
 
   // The browser automatically uses a local demo database while the values above
   // are placeholders. Set FORCE_DEMO_MODE to true to keep using the local demo.
-  FORCE_DEMO_MODE: false,
+  FORCE_DEMO_MODE: true,
 
   APP_NAME: 'Night Memo',
   RECENT_HISTORY_LIMIT: 30,
