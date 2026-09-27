@@ -11,5 +11,4 @@ export { getReportItems, saveReportItem } from './repositories/report-item-repos
 export { getWardReport, getReportsForDate, getRecentReports, getPreviousReport, upsertWardReport } from './repositories/report-repository.js';
 export { getAccounts, adminAccount } from './repositories/account-repository.js';
 export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
-export { getNightBundle } from './legacy-aggregates.js';
 export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
