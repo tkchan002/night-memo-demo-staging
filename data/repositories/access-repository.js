@@ -5,18 +5,12 @@ export async function getCurrentAccess(authUserId = null) {
   if (DB_MODE === 'demo') {
     const session = JSON.parse(sessionStorage.getItem('nightMemoDemoSession') || 'null');
     if (!session) return null;
-
     const state = demoRead();
     const access = state.accounts.find(
-      x => x.login_id.toLowerCase() === session.login_id.toLowerCase()
+      x => x.login_id.toLowerCase() === session.login_id.toLowerCase(),
     );
-
     if (!access) return null;
-
-    const ward = access.ward_id
-      ? state.wards.find(w => w.id === access.ward_id)
-      : null;
-
+    const ward = access.ward_id ? state.wards.find(w => w.id === access.ward_id) : null;
     return { ...access, wards: ward || null };
   }
 

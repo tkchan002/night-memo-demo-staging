@@ -1,5 +1,40 @@
+import { CONFIG } from '../../config.js';
 import { DB_MODE, supabase } from '../client.js';
 import { demoRead, demoWrite, uid } from '../demo-state.js';
+
+async function invokeAdminUsers(action, payload = {}) {
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError) throw sessionError;
+
+  const session = sessionData?.session;
+  if (!session?.access_token) {
+    throw new Error('Your Supabase session has expired. Please sign out and sign in again.');
+  }
+
+  const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/admin-users`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: CONFIG.SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ action, ...payload }),
+  });
+
+  const text = await response.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = { error: text || `HTTP ${response.status}` };
+  }
+
+  if (!response.ok) {
+    throw new Error(body?.error || body?.message || `admin-users failed with HTTP ${response.status}.`);
+  }
+  if (body?.error) throw new Error(body.error);
+  return body;
+}
 
 export async function getAccounts() {
   if (DB_MODE === 'demo') {
@@ -12,13 +47,8 @@ export async function getAccounts() {
       .sort((a, b) => a.login_id.localeCompare(b.login_id));
   }
 
-  const { data, error } = await supabase
-    .from('user_access')
-    .select('*, wards(id,code,display_name)')
-    .order('login_id');
-
-  if (error) throw error;
-  return data || [];
+  const result = await invokeAdminUsers('list');
+  return result?.accounts || [];
 }
 
 export async function adminAccount(action, payload) {
@@ -28,7 +58,10 @@ export async function adminAccount(action, payload) {
       if (state.accounts.some(a => a.login_id.toLowerCase() === payload.login_id.toLowerCase())) {
         throw new Error('Account already exists.');
       }
-      if (payload.role === 'ward' && state.accounts.some(a => a.role === 'ward' && a.ward_id === payload.ward_id)) {
+      if (
+        payload.role === 'ward' &&
+        state.accounts.some(a => a.role === 'ward' && a.ward_id === payload.ward_id)
+      ) {
         throw new Error('This ward already has a ward login account.');
       }
       const account = {
@@ -36,7 +69,7 @@ export async function adminAccount(action, payload) {
         login_id: payload.login_id,
         display_name: payload.display_name || payload.login_id,
         role: payload.role,
-        ward_id: payload.role === 'ward' ? (payload.ward_id || null) : null,
+        ward_id: payload.role === 'ward' ? payload.ward_id || null : null,
         active: true,
         demo_password: payload.password || 'demo',
         created_at: new Date().toISOString(),
@@ -57,7 +90,7 @@ export async function adminAccount(action, payload) {
     if (action === 'update_access') {
       Object.assign(account, {
         role: payload.role,
-        ward_id: payload.role === 'ward' ? (payload.ward_id || null) : null,
+        ward_id: payload.role === 'ward' ? payload.ward_id || null : null,
         active: payload.active,
         display_name: payload.display_name || account.display_name,
       });
@@ -67,20 +100,5 @@ export async function adminAccount(action, payload) {
     return account;
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-  const accessToken = sessionData.session?.access_token;
-  if (!accessToken) throw new Error('No authenticated Supabase session. Please log out and sign in again.');
-
-  const { data, error } = await supabase.functions.invoke('admin-users', {
-    body: { action, ...payload },
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (error) {
-    console.error('admin-users Edge Function error:', error);
-    throw new Error(error.message || 'Account operation failed in admin-users.');
-  }
-  if (data?.error) throw new Error(data.error);
-  return data;
+  return invokeAdminUsers(action, payload);
 }
