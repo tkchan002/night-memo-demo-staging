@@ -63,6 +63,40 @@ export async function getWardCapacity(wardId, date = defaultReportDate()) {
   return rows.find(x => dateInRange(date, x.effective_from, x.effective_to))?.bed_capacity ?? null;
 }
 
+export async function getCapacitiesForWards(wardIds, date = defaultReportDate()) {
+  const ids = [...new Set((wardIds || []).filter(Boolean))];
+  if (!ids.length) return {};
+
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const out = {};
+    for (const wardId of ids) {
+      const row = state.capacity_history
+        .filter(x => x.ward_id === wardId && dateInRange(date, x.effective_from, x.effective_to))
+        .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+      out[wardId] = row?.bed_capacity ?? null;
+    }
+    return out;
+  }
+
+  // One HTTP request for every ward instead of one request per ward.
+  const { data, error } = await supabase
+    .from('ward_capacity_history')
+    .select('ward_id,bed_capacity,effective_from,effective_to')
+    .in('ward_id', ids)
+    .lte('effective_from', date)
+    .order('effective_from', { ascending: false });
+  if (error) throw error;
+
+  const out = Object.fromEntries(ids.map(id => [id, null]));
+  for (const row of data || []) {
+    if (out[row.ward_id] == null && dateInRange(date, row.effective_from, row.effective_to)) {
+      out[row.ward_id] = row.bed_capacity;
+    }
+  }
+  return out;
+}
+
 export async function createWard(config) {
   const now = new Date().toISOString();
   if (DB_MODE === 'demo') {

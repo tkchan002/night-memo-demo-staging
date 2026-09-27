@@ -8,7 +8,6 @@ import { createRequestSequencer } from '../core/request-sequencer.js';
 import { deviceCount, normalizeDevice } from '../domain/report-model.js';
 import { loadFullWardReport, loadManagerNight } from '../services/report-service.js';
 import { renderFullReport } from '../components/report-view.js';
-import { getWardsForDate } from '../data/index.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -74,14 +73,11 @@ async function refresh() {
   $('#summaryRows').innerHTML = '<tr><td colspan="14">Loading...</td></tr>';
   $('#infectionRows').innerHTML = '<tr><td colspan="10">Loading...</td></tr>';
   try {
-    const [{ items, bundle }, wards] = await Promise.all([
-      loadManagerNight(date, section),
-      getWardsForDate(date).catch(() => []),
-    ]);
+    const { items, bundle, allWards } = await loadManagerNight(date, section);
     if (!refreshRequests.isCurrent(requestId)) return;
     state.items = items || [];
     state.bundle = bundle || [];
-    state.allWards = wards?.length ? wards : state.bundle.map(x => x.ward);
+    state.allWards = allWards?.length ? allWards : state.bundle.map(x => x.ward);
     $('#sectionTitle').textContent = section;
     $('#printDateLabel').textContent = toDisplayDate(date);
     $('#fullReportDate').value = date;

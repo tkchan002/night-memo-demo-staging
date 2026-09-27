@@ -46,7 +46,9 @@ async function init() {
   document.addEventListener('ward-main-tab-selected', () => { state.historyMode = false; state.staffMode = false; });
   window.addEventListener('beforeunload', event => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
   await loadForDate($('#memoDate').value);
-  await refreshHistory();
+  // History is loaded only when the user opens History (or after a save).
+  // This keeps the initial ward form on the critical path and avoids an
+  // unnecessary reports request during every login.
 }
 function markDirty() { if (state.loadedDate) state.dirty = true; }
 async function handleDateChange() {

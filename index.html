@@ -1,1 +1,54 @@
-<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=./login.html"><title>Night Memo</title></head><body><a href="./login.html">Open Night Memo</a></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Night Memo Login</title>
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <link rel="dns-prefetch" href="//esm.sh">
+  <link rel="preconnect" href="https://csibbrzbljemusyzpzmo.supabase.co" crossorigin>
+  <link rel="dns-prefetch" href="//csibbrzbljemusyzpzmo.supabase.co">
+  <link rel="stylesheet" href="./css/legacy-shell.css">
+  <link rel="stylesheet" href="./css/login.css">
+</head>
+<body class="legacy-page login-page">
+  <main class="legacy-shell login-shell">
+    <div class="legacy-window-title">
+      <div class="legacy-title-text">Night Memo</div>
+      <div class="legacy-subtitle">Hospital ward night reporting system</div>
+      <div class="legacy-spacer"></div>
+      <div id="modeBadge"></div>
+    </div>
+    <div class="tab-strip login-role-tabs" aria-label="Login type">
+      <button type="button" class="tab login-option" data-role="ward">Ward Login</button>
+      <button type="button" class="tab login-option" data-role="manager">Patrol Night Login</button>
+      <button type="button" class="tab login-option" data-role="maintenance">Night Memo Maintenance</button>
+    </div>
+    <section class="main-panel">
+      <div class="login-brand-panel" id="loginIntro">
+        <h1>Night Memo</h1>
+        <p>Select a login type above.</p>
+      </div>
+      <section class="login-box" id="loginBox">
+        <h2 id="loginTitle">Login</h2>
+        <form id="loginForm">
+          <div class="login-form-row">
+            <label id="loginIdLabel" for="loginId">Account</label>
+            <input id="loginId" type="email" autocomplete="username" required>
+          </div>
+          <div class="login-form-row">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" required>
+          </div>
+          <div class="status-note login-demo hidden" id="demoHint"></div>
+          <div class="login-actions">
+            <button type="button" class="pill" id="backBtn">Back</button>
+            <button type="submit" class="pill" id="loginBtn">Login</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+  <script type="module" src="./login.js"></script>
+</body>
+</html>

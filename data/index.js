@@ -3,7 +3,7 @@ export { ensureDemoState, resetDemoDatabase } from './demo-state.js';
 export { getCurrentAccess } from './repositories/access-repository.js';
 export {
   getAllWards, getWardById, getWardByCode, getOperatingPeriods, getWardsForDate,
-  isWardOperational, getCapacityHistory, getWardCapacity, createWard, updateWard,
+  isWardOperational, getCapacityHistory, getWardCapacity, getCapacitiesForWards, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity,
 } from './repositories/ward-repository.js';
 export { getWardStaff, saveWardStaff, setStaffActive } from './repositories/staff-repository.js';
@@ -12,3 +12,4 @@ export { getWardReport, getReportsForDate, getRecentReports, getPreviousReport, 
 export { getAccounts, adminAccount } from './repositories/account-repository.js';
 export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
 export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
+export { getWardNightSnapshot, getManagerNightSnapshot, getMaintenanceWardsSnapshot } from './repositories/bootstrap-repository.js';

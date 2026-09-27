@@ -3,6 +3,7 @@ import {
   getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
   getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, getAuditLog,
+  getMaintenanceWardsSnapshot,
 } from '../data/index.js';
 import { qs, qsa, esc } from '../core/dom.js';
 import { todayISO, toDisplayDate, formatDateTime } from '../core/dates.js';
@@ -11,7 +12,19 @@ import { setAppHeader } from '../components/app-shell.js';
 import { DB_MODE } from '../data/index.js';
 
 const $ = qs;
-const state = { access: null, wards: [], accounts: [], items: [], editingAccount: null, editingItem: null, editingWard: null };
+const state = {
+  access: null,
+  wards: [],
+  periods: [],
+  accounts: [],
+  items: [],
+  editingAccount: null,
+  editingItem: null,
+  editingWard: null,
+  loaded: { wards: false, accounts: false, items: false },
+  loading: {},
+};
+
 init().catch(error => { console.error(error); flash(error.message || String(error), 'error', 8000); });
 
 async function init() {
@@ -19,7 +32,9 @@ async function init() {
   if (!state.access) return;
   setAppHeader({ title: 'Night Memo Maintenance', subtitle: 'Configuration and lifecycle console', access: state.access, mode: DB_MODE });
   bind();
-  await reloadAll();
+  // Only the visible Wards tab is on the initial critical path. Accounts,
+  // Report Items, Staff and Audit are fetched only when the user opens them.
+  await ensureWardsLoaded();
 }
 
 function bind() {
@@ -40,23 +55,69 @@ function bind() {
   $('#itemForm').onsubmit = saveItem;
   $('#refreshAudit').onclick = renderAudit;
 }
-function showPage(name) {
+
+async function showPage(name) {
   qsa('[data-maint]').forEach(x => x.classList.toggle('active', x.dataset.maint === name));
   qsa('[data-maint-page]').forEach(x => x.classList.toggle('active', x.dataset.maintPage === name));
-  if (name === 'capacity') renderCapacityHistory();
-  if (name === 'accounts') renderAccounts();
-  if (name === 'staff') renderMaintStaff();
-  if (name === 'audit') renderAudit();
+  try {
+    if (name === 'wards') await ensureWardsLoaded();
+    if (name === 'capacity') { await ensureWardsLoaded(); await renderCapacityHistory(); }
+    if (name === 'accounts') { await ensureWardsLoaded(); await ensureAccountsLoaded(); }
+    if (name === 'staff') { await ensureWardsLoaded(); await renderMaintStaff(); }
+    if (name === 'items') await ensureItemsLoaded();
+    if (name === 'audit') await renderAudit();
+  } catch (error) {
+    console.error(`Unable to load maintenance tab ${name}:`, error);
+    flash(error.message || String(error), 'error', 7000);
+  }
 }
+
 function openModal(sel) { $(sel).classList.add('show'); }
 function closeModal(sel) { $(sel).classList.remove('show'); }
-async function reloadAll() {
-  [state.wards, state.accounts, state.items] = await Promise.all([getAllWards(), getAccounts(), getReportItems(todayISO(), true)]);
-  fillWardSelects();
-  await renderWardCards();
-  renderAccounts();
-  renderItems();
+
+async function ensureWardsLoaded(force = false) {
+  if (state.loaded.wards && !force) return;
+  if (state.loading.wards) return state.loading.wards;
+  $('#wardCards').innerHTML = '<div class="muted">Loading wards...</div>';
+  state.loading.wards = (async () => {
+    const snapshot = await getMaintenanceWardsSnapshot();
+    if (snapshot) {
+      state.wards = snapshot.wards || [];
+      state.periods = snapshot.periods || [];
+    } else {
+      [state.wards, state.periods] = await Promise.all([getAllWards(), getOperatingPeriods()]);
+    }
+    state.loaded.wards = true;
+    fillWardSelects();
+    renderWardCards();
+  })();
+  try { await state.loading.wards; } finally { state.loading.wards = null; }
 }
+
+async function ensureAccountsLoaded(force = false) {
+  if (state.loaded.accounts && !force) { renderAccounts(); return; }
+  if (state.loading.accounts) return state.loading.accounts;
+  $('#accountRows').innerHTML = '<tr><td colspan="5" class="muted">Loading accounts...</td></tr>';
+  state.loading.accounts = (async () => {
+    state.accounts = await getAccounts();
+    state.loaded.accounts = true;
+    renderAccounts();
+  })();
+  try { await state.loading.accounts; } finally { state.loading.accounts = null; }
+}
+
+async function ensureItemsLoaded(force = false) {
+  if (state.loaded.items && !force) { renderItems(); return; }
+  if (state.loading.items) return state.loading.items;
+  $('#itemRows').innerHTML = '<tr><td colspan="7" class="muted">Loading report items...</td></tr>';
+  state.loading.items = (async () => {
+    state.items = await getReportItems(todayISO(), true);
+    state.loaded.items = true;
+    renderItems();
+  })();
+  try { await state.loading.items; } finally { state.loading.items = null; }
+}
+
 function fillWardSelects() {
   const opts = '<option value="">— None —</option>' + state.wards.map(w => `<option value="${esc(w.id)}">${esc(w.code)} — ${esc(w.display_name)}</option>`).join('');
   ['#capacityWard', '#staffWard', '#accountWard'].forEach(sel => {
@@ -66,8 +127,10 @@ function fillWardSelects() {
   if (!$('#capacityWard').value && state.wards[0]) $('#capacityWard').value = state.wards[0].id;
   if (!$('#staffWard').value && state.wards[0]) $('#staffWard').value = state.wards[0].id;
 }
-async function renderWardCards() {
-  const today = todayISO(), periods = await getOperatingPeriods();
+
+function renderWardCards() {
+  const today = todayISO();
+  const periods = state.periods || [];
   $('#wardCards').innerHTML = state.wards.map(w => {
     const open = periods.some(p => p.ward_id === w.id && p.start_date <= today && (!p.end_date || p.end_date >= today));
     return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(w.empty_bed_gender_mode)}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions"><button class="btn secondary small" data-edit-ward="${w.id}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${w.id}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${w.id}">Reopen</button>`}</div></div>`;
@@ -76,6 +139,12 @@ async function renderWardCards() {
   qsa('[data-close-ward]').forEach(b => { b.onclick = () => closeWard(b.dataset.closeWard); });
   qsa('[data-reopen-ward]').forEach(b => { b.onclick = () => reopenWard(b.dataset.reopenWard); });
 }
+
+async function refreshWardConfiguration() {
+  state.loaded.wards = false;
+  await ensureWardsLoaded(true);
+}
+
 function openWardModal(w = null) {
   state.editingWard = w;
   $('#wardModalTitle').textContent = w ? 'Edit Ward' : 'Add Ward';
@@ -95,16 +164,16 @@ async function saveWardFromModal(event) {
       await createWard({ code: $('#mWardCode').value.trim(), display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, display_order: $('#mWardOrder').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
       flash('Ward created. Create its login account in Accounts.', 'success', 6000);
     }
-    closeModal('#wardModal'); await reloadAll();
+    closeModal('#wardModal'); await refreshWardConfiguration();
   } catch (error) { flash(error.message || String(error), 'error', 7000); }
 }
 async function closeWard(wardId) {
   const date = prompt('Closing date (YYYY-MM-DD):', todayISO()); if (!date) return;
   const periods = await getOperatingPeriods(wardId); const open = periods.find(p => p.start_date <= date && (!p.end_date || p.end_date >= date));
   if (!open) return flash('No open operating period found for that date.', 'warning');
-  await closeOperatingPeriod(open.id, date, 'Ward closed from maintenance console'); flash('Ward operating period closed.', 'success'); await renderWardCards();
+  await closeOperatingPeriod(open.id, date, 'Ward closed from maintenance console'); flash('Ward operating period closed.', 'success'); await refreshWardConfiguration();
 }
-async function reopenWard(wardId) { const date = prompt('Reopening date (YYYY-MM-DD):', todayISO()); if (!date) return; await addOperatingPeriod(wardId, date, null, 'Ward reopened from maintenance console'); flash('Ward reopened.', 'success'); await renderWardCards(); }
+async function reopenWard(wardId) { const date = prompt('Reopening date (YYYY-MM-DD):', todayISO()); if (!date) return; await addOperatingPeriod(wardId, date, null, 'Ward reopened from maintenance console'); flash('Ward reopened.', 'success'); await refreshWardConfiguration(); }
 async function renderCapacityHistory() {
   const wardId = $('#capacityWard').value; if (!wardId) { $('#capacityHistory').innerHTML = ''; return; }
   const rows = await getCapacityHistory(wardId);
@@ -130,7 +199,7 @@ async function saveAccount(event) {
       if ($('#accountLogin').value.trim() !== a.login_id) await adminAccount('rename_login', { auth_user_id: a.auth_user_id, login_id: $('#accountLogin').value.trim(), display_name: $('#accountDisplay').value.trim() });
       await adminAccount('update_access', { auth_user_id: a.auth_user_id, role: $('#accountRole').value, ward_id: $('#accountRole').value === 'ward' ? ($('#accountWard').value || null) : null, active: $('#accountActive').value === 'true', display_name: $('#accountDisplay').value.trim() });
     }
-    closeModal('#accountModal'); state.accounts = await getAccounts(); renderAccounts(); flash('Account saved.', 'success');
+    closeModal('#accountModal'); await ensureAccountsLoaded(true); flash('Account saved.', 'success');
   } catch (error) { flash(error.message || String(error), 'error', 7000); }
 }
 async function savePassword(event) { event.preventDefault(); try { await adminAccount('reset_password', { auth_user_id: $('#passwordUserId').value, password: $('#newPassword').value }); closeModal('#passwordModal'); flash('Password reset.', 'success'); } catch (error) { flash(error.message || String(error), 'error', 7000); } }
@@ -162,7 +231,7 @@ async function saveItem(event) {
   try {
     const old = state.editingItem;
     await saveReportItem({ id: old?.id || undefined, key: $('#itemKey').value.trim(), label: $('#itemLabel').value.trim(), section: $('#itemSection').value, input_type: old?.builtin ? old.input_type : $('#itemType').value, options: $('#itemOptions').value.split(',').map(x => x.trim()).filter(Boolean), sort_order: Number($('#itemOrder').value) || 999, active: $('#itemActive').value === 'true', effective_from: $('#itemFrom').value || todayISO(), effective_to: $('#itemTo').value || null, builtin: old?.builtin || false, manager_slot: old?.manager_slot || null, config: old?.config || { storage: 'dynamicItems' } });
-    closeModal('#itemModal'); flash('Report item saved.', 'success'); state.items = await getReportItems(todayISO(), true); renderItems();
+    closeModal('#itemModal'); flash('Report item saved.', 'success'); await ensureItemsLoaded(true);
   } catch (error) { flash(error.message || String(error), 'error', 7000); }
 }
 async function renderAudit() { const rows = await getAuditLog(200); $('#auditRows').innerHTML = rows.length ? rows.map(r => `<div class="audit-row"><b>${esc(formatDateTime(r.occurred_at))}</b> · <code>${esc(r.action)}</code> · ${esc(r.entity_type || '')} ${esc(r.entity_id || '')}<div class="muted">${esc(JSON.stringify(r.details || {}))}</div></div>`).join('') : '<div class="muted">No audit entries yet.</div>'; }
