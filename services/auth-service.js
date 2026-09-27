@@ -1,54 +1,123 @@
-import { DB_MODE, supabase, getCurrentAccess, ensureDemoState } from '../data/index.js';
+import { DB_MODE, supabase } from '../data/client.js';
+import { ensureDemoState } from '../data/demo-state.js';
+import { getCurrentAccess } from '../data/repositories/access-repository.js';
 
-export async function signIn(account, password, expectedRole = null) {
+export async function signIn(
+  account,
+  password,
+  expectedRole = null
+) {
   account = String(account || '').trim();
-  if (!account || !password) throw new Error('Enter account and password.');
 
+  if (!account || !password) {
+    throw new Error('Enter account and password.');
+  }
+
+  // Demo mode keeps the existing behaviour.
   if (DB_MODE === 'demo') {
     const demoState = ensureDemoState(false);
-    const demoAccount = demoState.accounts.find(a => a.login_id.toLowerCase() === account.toLowerCase());
-    const expectedPassword = demoAccount?.demo_password || 'demo';
-    if (!demoAccount || password !== expectedPassword) throw new Error('Invalid account or password.');
-    sessionStorage.setItem('nightMemoDemoSession', JSON.stringify({ login_id: account }));
+
+    const demoAccount = demoState.accounts.find(
+      accountRow =>
+        accountRow.login_id.toLowerCase() === account.toLowerCase()
+    );
+
+    const expectedPassword =
+      demoAccount?.demo_password || 'demo';
+
+    if (!demoAccount || password !== expectedPassword) {
+      throw new Error('Invalid account or password.');
+    }
+
+    sessionStorage.setItem(
+      'nightMemoDemoSession',
+      JSON.stringify({ login_id: account })
+    );
+
     const access = await getCurrentAccess();
-    if (!access || !access.active) throw new Error('Account is not active.');
+
+    if (!access || !access.active) {
+      throw new Error('Account is not active.');
+    }
+
     if (expectedRole && access.role !== expectedRole) {
       sessionStorage.removeItem('nightMemoDemoSession');
-      throw new Error('This account does not have access to that login option.');
+
+      throw new Error(
+        'This account does not have access to that login option.'
+      );
     }
+
     return access;
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email: account, password });
-  if (error) throw error;
-  const access = await getCurrentAccess(data.user.id);
-  if (!access || !access.active) {
-    await supabase.auth.signOut();
-    throw new Error('This account is disabled or has no Night Memo access.');
+  // Supabase:
+  // Only authenticate here.
+  // The destination page will check role/access exactly once.
+  const { data, error } =
+    await supabase.auth.signInWithPassword({
+      email: account,
+      password,
+    });
+
+  if (error) {
+    throw error;
   }
-  if (expectedRole && access.role !== expectedRole) {
-    await supabase.auth.signOut();
-    throw new Error('This account does not have access to that login option.');
+
+  if (!data?.user || !data?.session) {
+    throw new Error('Login succeeded but no session was returned.');
   }
-  return access;
+
+  return data.user;
 }
 
 export async function signOut() {
-  if (DB_MODE === 'demo') sessionStorage.removeItem('nightMemoDemoSession');
-  else await supabase.auth.signOut();
+  if (DB_MODE === 'demo') {
+    sessionStorage.removeItem('nightMemoDemoSession');
+  } else {
+    await supabase.auth.signOut();
+  }
+
   location.href = './login.html';
 }
 
 export async function requireRole(roles) {
   roles = Array.isArray(roles) ? roles : [roles];
+
+  let access;
+
   if (DB_MODE === 'supabase') {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) { location.href = './login.html'; return null; }
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+
+    if (error || !session) {
+      location.href = './login.html';
+      return null;
+    }
+
+    // IMPORTANT:
+    // Pass the known user ID so getCurrentAccess()
+    // does not need another auth.getUser() network request.
+    access = await getCurrentAccess(session.user.id);
+
+  } else {
+    access = await getCurrentAccess();
   }
-  const access = await getCurrentAccess();
-  if (!access || !access.active || !roles.includes(access.role)) {
+
+  if (
+    !access ||
+    !access.active ||
+    !roles.includes(access.role)
+  ) {
+    if (DB_MODE === 'supabase') {
+      await supabase.auth.signOut();
+    }
+
     location.href = './login.html';
     return null;
   }
+
   return access;
 }
