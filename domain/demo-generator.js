@@ -284,8 +284,19 @@ function buildSessionPayload({ ward, capacity, items, rng, scenario, previousTot
   }
 
   payload.nurses = syntheticNurses(ward.code, rng, cap);
-  payload.staffAM = `${randomInt(rng, 3, 6)} RN / ${randomInt(rng, 0, 2)} EN`;
-  payload.staffPM = `${randomInt(rng, 3, 6)} RN / ${randomInt(rng, 0, 2)} EN`;
+
+  // AM/PM duty staffing in Night Memo is a simple numeric headcount, not an
+  // RN/EN breakdown. Generate realistic values in 0.5-person increments.
+  // Capacity provides the baseline, with a small shift-to-shift variation.
+  const staffingBase = clamp(Math.round((cap / 8) * 2) / 2, 2.5, 9);
+  const staffingVariation = () => choose(rng, [-0.5, 0, 0, 0, 0.5]);
+  const formatStaffing = value => {
+    const rounded = clamp(Math.round(value * 2) / 2, 2, 10);
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  };
+  payload.staffAM = formatStaffing(staffingBase + staffingVariation());
+  payload.staffPM = formatStaffing(staffingBase + staffingVariation());
+
   payload.sigRank = payload.nurses[0]?.role || 'RN';
   payload.sigName = payload.nurses[0]?.name || `DEMO ${ward.code} NURSE 1`;
   payload.sigAppt = '';
