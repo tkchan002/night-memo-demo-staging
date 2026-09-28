@@ -12,6 +12,12 @@ function isMissingSubmittedAt(error) {
   return /submitted_at/i.test(text) && /column|schema|does not exist|could not find/i.test(text);
 }
 
+function isMissingRpc(error, functionName) {
+  const text = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  return /PGRST202|42883|could not find.*function|function .* does not exist/i.test(text)
+    && (!functionName || text.toLowerCase().includes(functionName.toLowerCase()));
+}
+
 function latestPerWard(rows) {
   const seen = new Set();
   return [...(rows || [])].sort(newestFirst).filter(row => {
@@ -138,3 +144,96 @@ export async function saveWardReportSession(row, windowMinutes = SUBMISSION_WIND
 
 // Compatibility export for older callers.
 export const upsertWardReport = saveWardReportSession;
+export async function getWardReportDraft(wardId, date = defaultReportDate()) {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    return (state.ward_report_drafts || []).find(r => r.ward_id === wardId && r.report_date === date) || null;
+  }
+  const { data, error } = await supabase.rpc('get_ward_report_draft', {
+    p_ward_id: wardId,
+    p_report_date: date,
+  });
+  if (!error) return data || null;
+  if (isMissingRpc(error, 'get_ward_report_draft')) return null;
+  throw error;
+}
+
+export async function saveWardReportDraft(row) {
+  const nowISO = new Date().toISOString();
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    state.ward_report_drafts = state.ward_report_drafts || [];
+    const index = state.ward_report_drafts.findIndex(r => r.ward_id === row.ward_id && r.report_date === row.report_date);
+    const out = {
+      ...(index >= 0 ? state.ward_report_drafts[index] : {}),
+      ...row,
+      saved_at: nowISO,
+      updated_at: nowISO,
+    };
+    if (index >= 0) state.ward_report_drafts[index] = out;
+    else state.ward_report_drafts.push(out);
+    demoWrite(state);
+    return out;
+  }
+  const { data, error } = await supabase.rpc('save_ward_report_draft', { p_row: row });
+  if (error) {
+    if (isMissingRpc(error, 'save_ward_report_draft')) {
+      throw new Error('Ward draft support is not installed in Supabase. Run 20260928_ward_draft_submit.sql first.');
+    }
+    throw error;
+  }
+  return data;
+}
+
+export async function deleteWardReportDraft(wardId, date = defaultReportDate()) {
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    state.ward_report_drafts = (state.ward_report_drafts || []).filter(r => !(r.ward_id === wardId && r.report_date === date));
+    demoWrite(state);
+    return true;
+  }
+  const { error } = await supabase.rpc('delete_ward_report_draft', {
+    p_ward_id: wardId,
+    p_report_date: date,
+  });
+  if (error && !isMissingRpc(error, 'delete_ward_report_draft')) throw error;
+  return !error;
+}
+
+export async function getWardSubmissionStatus(wardId, windowMinutes = SUBMISSION_WINDOW_MINUTES) {
+  const minutes = Math.max(1, Number(windowMinutes) || SUBMISSION_WINDOW_MINUTES);
+  if (DB_MODE === 'demo') {
+    const rows = demoRead().ward_reports.filter(r => r.ward_id === wardId && reportSubmittedAt(r)).sort(newestFirst);
+    const latest = rows[0] || null;
+    return {
+      last_submitted_at: latest ? reportSubmittedAt(latest) : null,
+      last_report_id: latest?.id || null,
+      last_report_date: latest?.report_date || null,
+      submitted_in_window: latest ? isRecentSubmission(latest, new Date(), minutes) : false,
+    };
+  }
+  const { data, error } = await supabase.rpc('get_ward_submission_status', {
+    p_ward_id: wardId,
+    p_window_minutes: minutes,
+  });
+  if (!error) return data || { last_submitted_at: null, submitted_in_window: false };
+  if (!isMissingRpc(error, 'get_ward_submission_status')) throw error;
+
+  const fallback = await supabase
+    .from('ward_reports')
+    .select('id,report_date,submitted_at,updated_at')
+    .eq('ward_id', wardId)
+    .not('submitted_at', 'is', null)
+    .order('submitted_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (fallback.error) throw fallback.error;
+  const latest = fallback.data;
+  return {
+    last_submitted_at: latest?.submitted_at || null,
+    last_report_id: latest?.id || null,
+    last_report_date: latest?.report_date || null,
+    submitted_in_window: latest ? isRecentSubmission(latest, new Date(), minutes) : false,
+  };
+}
+

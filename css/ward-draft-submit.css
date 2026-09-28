@@ -1,0 +1,44 @@
+/* Ward draft / submit workflow additions. */
+#submissionBanner {
+  width: 100%;
+  margin: 5px 0 8px;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #b8b8b0;
+  border-radius: 4px;
+  font-size: 0.94rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+}
+#submissionBanner strong { font-size: 1rem; }
+#submissionBanner span { font-size: .86rem; }
+#submissionBanner.submitted {
+  background: #e9f7eb;
+  border-color: #83b98a;
+  color: #185b22;
+}
+#submissionBanner.pending {
+  background: #fff4d6;
+  border-color: #d4ad4f;
+  color: #765000;
+}
+#submissionBanner.unknown {
+  background: #f0f0f0;
+  border-color: #a9a9a9;
+  color: #555;
+}
+#submitBtn {
+  background: linear-gradient(to bottom,#eaffec 0%,#c8efcc 45%,#8fca96 100%);
+  border-color: #5b9563;
+}
+#submitBtn:hover {
+  background: linear-gradient(to bottom,#f1fff2 0%,#d5f5d9 45%,#9ed5a5 100%);
+}
+@media (max-width: 700px) {
+  #submissionBanner { align-items: flex-start; flex-direction: column; gap: 2px; }
+}
+@media print {
+  #submissionBanner { display: none !important; }
+}

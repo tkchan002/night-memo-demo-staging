@@ -11,11 +11,15 @@ function itemsForReport(allItems, date, report, includeInactiveHistorical = fals
 }
 
 export async function loadWardReportContext(wardId, date) {
-  const snapshot = await db.getWardNightSnapshot(wardId, date);
+  const [snapshot, draft] = await Promise.all([
+    db.getWardNightSnapshot(wardId, date),
+    db.getWardReportDraft(wardId, date),
+  ]);
   if (snapshot) {
     const allItems = snapshot.items || [];
     const report = snapshot.report || null;
-    const items = itemsForReport(allItems, date, report, false);
+    const sourceRecord = draft || report;
+    const items = itemsForReport(allItems, date, sourceRecord, false);
     return {
       operational: Boolean(snapshot.operational),
       capacity: Number(snapshot.capacity) || 0,
@@ -23,9 +27,9 @@ export async function loadWardReportContext(wardId, date) {
       allItems,
       staff: snapshot.staff || [],
       report,
+      draft,
     };
   }
-
   const [operational, capacity, allItems, staff, report] = await Promise.all([
     db.isWardOperational(wardId, date),
     db.getWardCapacity(wardId, date),
@@ -33,8 +37,9 @@ export async function loadWardReportContext(wardId, date) {
     db.getWardStaff(wardId, false),
     db.getWardReport(wardId, date),
   ]);
-  const items = itemsForReport(allItems, date, report, false);
-  return { operational, capacity: Number(capacity) || 0, items, allItems, staff: staff || [], report };
+  const sourceRecord = draft || report;
+  const items = itemsForReport(allItems, date, sourceRecord, false);
+  return { operational, capacity: Number(capacity) || 0, items, allItems, staff: staff || [], report, draft };
 }
 
 export async function loadHistoricalReportContext(wardId, report) {
@@ -134,25 +139,59 @@ export async function loadFullWardReport(wardId, date, ward, fallbackItems = [])
   return { ward, report, capacity, items };
 }
 
-export async function saveWardReport({ wardId, date, editedPayload, existingReport, capacity, items }) {
-  const merged = mergePayloadPreservingUnknown(existingReport?.payload, editedPayload);
+function buildWardRow({ wardId, date, editedPayload, existingReport, existingDraft, capacity, items }) {
+  const basePayload = existingDraft?.payload || existingReport?.payload;
+  const merged = mergePayloadPreservingUnknown(basePayload, editedPayload);
   const validation = validateReportPayload(merged, { capacity });
   if (!validation.valid) throw new Error(validation.errors.join(' '));
-  const row = {
-    ward_id: wardId,
-    report_date: date,
-    payload: { ...normalizeReportPayload(validation.payload), savedAt: new Date().toISOString() },
-    bed_capacity_snapshot: capacity,
-    form_version: 1,
-    report_item_snapshot: snapshotReportItems(items),
+  return {
+    row: {
+      ward_id: wardId,
+      report_date: date,
+      payload: { ...normalizeReportPayload(validation.payload), savedAt: new Date().toISOString() },
+      bed_capacity_snapshot: capacity,
+      // Keep the registered form version used by the live database FK.
+      form_version: 1,
+      report_item_snapshot: snapshotReportItems(items),
+    },
+    warnings: validation.warnings,
   };
+}
+
+export async function saveWardDraft({ wardId, date, editedPayload, existingReport, existingDraft, capacity, items }) {
+  const { row, warnings } = buildWardRow({ wardId, date, editedPayload, existingReport, existingDraft, capacity, items });
   try {
-    return { report: await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES), warnings: validation.warnings };
+    return { draft: await db.saveWardReportDraft(row), warnings };
   } catch (error) {
     if (/report_item_snapshot/i.test(error?.message || '')) {
       delete row.report_item_snapshot;
-      return { report: await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES), warnings: validation.warnings };
+      return { draft: await db.saveWardReportDraft(row), warnings };
     }
     throw error;
   }
 }
+
+export async function submitWardReport({ wardId, date, editedPayload, existingReport, existingDraft, capacity, items }) {
+  const { row, warnings } = buildWardRow({ wardId, date, editedPayload, existingReport, existingDraft, capacity, items });
+  try {
+    const report = await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES);
+    await db.deleteWardReportDraft(wardId, date);
+    return { report, warnings };
+  } catch (error) {
+    if (/report_item_snapshot/i.test(error?.message || '')) {
+      delete row.report_item_snapshot;
+      const report = await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES);
+      await db.deleteWardReportDraft(wardId, date);
+      return { report, warnings };
+    }
+    throw error;
+  }
+}
+
+// Compatibility: older callers that used saveWardReport intended a real submission.
+export const saveWardReport = submitWardReport;
+
+export async function loadWardSubmissionStatus(wardId, windowMinutes = SUBMISSION_WINDOW_MINUTES) {
+  return db.getWardSubmissionStatus(wardId, windowMinutes);
+}
+
