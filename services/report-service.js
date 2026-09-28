@@ -1,6 +1,8 @@
 import * as db from '../data/index.js';
+import { todayISO } from '../core/dates.js';
 import { effectiveItems, mergePayloadPreservingUnknown, normalizeReportPayload, snapshotReportItems } from '../domain/report-model.js';
 import { validateReportPayload } from '../domain/report-validation.js';
+import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
 
 function itemsForReport(allItems, date, report, includeInactiveHistorical = false) {
   return report?.report_item_snapshot?.length
@@ -9,9 +11,6 @@ function itemsForReport(allItems, date, report, includeInactiveHistorical = fals
 }
 
 export async function loadWardReportContext(wardId, date) {
-  // Preferred path: a single Postgres round trip. The repository returns null
-  // until the optional performance migration is installed, so deployments can
-  // be upgraded incrementally.
   const snapshot = await db.getWardNightSnapshot(wardId, date);
   if (snapshot) {
     const allItems = snapshot.items || [];
@@ -48,10 +47,9 @@ export async function loadHistoricalReportContext(wardId, report) {
   return { report, capacity, items };
 }
 
-export async function loadManagerNight(date, section) {
-  // Preferred path: wards, reports, capacities and item definitions arrive in
-  // one RPC response. Filtering into Male/Female/Other remains a domain/UI rule.
-  const snapshot = await db.getManagerNightSnapshot(date);
+export async function loadManagerCurrent(windowMinutes = SUBMISSION_WINDOW_MINUTES) {
+  const date = todayISO();
+  const snapshot = await db.getManagerRecentSnapshot(windowMinutes);
   if (snapshot) {
     const allItems = snapshot.items || [];
     const allWards = snapshot.wards || [];
@@ -59,12 +57,13 @@ export async function loadManagerNight(date, section) {
     const capacities = Object.fromEntries(
       (snapshot.capacities || []).map(row => [row.ward_id, row.bed_capacity]),
     );
-    const wards = allWards.filter(ward => !section || ward.manager_section === section);
     const items = effectiveItems(allItems, date, { includeInactiveHistorical: false });
     return {
+      date,
+      windowMinutes,
       items,
       allWards,
-      bundle: wards.map(ward => ({
+      bundle: allWards.map(ward => ({
         ward,
         capacity: capacities[ward.id] ?? null,
         report: reports.find(r => r.ward_id === ward.id) || null,
@@ -72,8 +71,43 @@ export async function loadManagerNight(date, section) {
     };
   }
 
-  // Fallback path: still avoid the old N+1 capacity pattern. Capacities for all
-  // open wards are fetched with one query rather than one query per ward.
+  const [allItems, allWards, reports] = await Promise.all([
+    db.getReportItems(date, true),
+    db.getWardsForDate(date),
+    db.getReportsSince(windowMinutes),
+  ]);
+  const capacityByWard = await db.getCapacitiesForWards(allWards.map(w => w.id), date);
+  const items = effectiveItems(allItems, date, { includeInactiveHistorical: false });
+  return {
+    date,
+    windowMinutes,
+    items,
+    allWards,
+    bundle: allWards.map(ward => ({
+      ward,
+      capacity: capacityByWard[ward.id] ?? null,
+      report: reports.find(r => r.ward_id === ward.id) || null,
+    })),
+  };
+}
+
+// Historical/date-based compatibility path retained for any callers outside the
+// current Manager summary.
+export async function loadManagerNight(date, section) {
+  const snapshot = await db.getManagerNightSnapshot(date);
+  if (snapshot) {
+    const allItems = snapshot.items || [];
+    const allWards = snapshot.wards || [];
+    const reports = snapshot.reports || [];
+    const capacities = Object.fromEntries((snapshot.capacities || []).map(row => [row.ward_id, row.bed_capacity]));
+    const wards = allWards.filter(ward => !section || ward.manager_section === section);
+    const items = effectiveItems(allItems, date, { includeInactiveHistorical: false });
+    return {
+      items,
+      allWards,
+      bundle: wards.map(ward => ({ ward, capacity: capacities[ward.id] ?? null, report: reports.find(r => r.ward_id === ward.id) || null })),
+    };
+  }
   const [allItems, allWards, reports] = await Promise.all([
     db.getReportItems(date, true),
     db.getWardsForDate(date),
@@ -85,11 +119,7 @@ export async function loadManagerNight(date, section) {
   return {
     items,
     allWards,
-    bundle: wards.map(ward => ({
-      ward,
-      capacity: capacityByWard[ward.id] ?? null,
-      report: reports.find(r => r.ward_id === ward.id) || null,
-    })),
+    bundle: wards.map(ward => ({ ward, capacity: capacityByWard[ward.id] ?? null, report: reports.find(r => r.ward_id === ward.id) || null })),
   };
 }
 
@@ -117,11 +147,11 @@ export async function saveWardReport({ wardId, date, editedPayload, existingRepo
     report_item_snapshot: snapshotReportItems(items),
   };
   try {
-    return { report: await db.upsertWardReport(row), warnings: validation.warnings };
+    return { report: await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES), warnings: validation.warnings };
   } catch (error) {
     if (/report_item_snapshot/i.test(error?.message || '')) {
       delete row.report_item_snapshot;
-      return { report: await db.upsertWardReport(row), warnings: validation.warnings };
+      return { report: await db.saveWardReportSession(row, SUBMISSION_WINDOW_MINUTES), warnings: validation.warnings };
     }
     throw error;
   }

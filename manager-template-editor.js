@@ -9,9 +9,13 @@ import {
 } from './manager-template-store.js';
 
 const DEFAULT_TEMPLATE_HTML = `<div class="memo-template">
-  <h1 style="text-align:center;text-decoration:underline;margin:0 0 4px">Night Memo ({{section}})</h1>
+  <h1 style="text-align:center;text-decoration:underline;margin:0 0 4px">Night Memo</h1>
   <div style="text-align:center;margin-bottom:10px">{{report_date_display}}</div>
   {{ward_summary_table}}
+  <h2 style="margin:16px 0 6px">Clinical Attention</h2>
+  {{clinical_attention_table}}
+  <h2 style="margin:16px 0 6px">Report Items — Configured Order</h2>
+  {{report_items_table}}
   <h2 style="margin:16px 0 6px">Infection / Device Details</h2>
   {{infection_table}}
 </div>`;
@@ -19,8 +23,9 @@ const DEFAULT_TEMPLATE_HTML = `<div class="memo-template">
 const TOKEN_LABELS = {
   report_date_display: 'Report Date',
   report_date: 'Report Date (ISO)',
-  section: 'Memo Section',
   ward_summary_table: 'Ward Summary Table',
+  clinical_attention_table: 'Clinical Attention Table',
+  report_items_table: 'Configured Report Items Table',
   infection_table: 'Infection / Device Table',
   page_break: 'Page Break',
 };
@@ -302,12 +307,18 @@ function renderTemplateHtml(templateHtml) {
     report_date: context.reportDate || '',
     section: context.section || '',
     ward_summary_table: context.wardSummaryTableHtml || '',
+    clinical_attention_table: context.clinicalAttentionTableHtml || '',
+    report_items_table: context.reportItemsTableHtml || '',
     infection_table: context.infectionTableHtml || '',
     page_break: '<div class="manager-page-break"></div>',
   };
   for (const [key, value] of Object.entries(replacements)) {
     output = output.split(`{{${key}}}`).join(value);
   }
+  // Existing published templates may still contain the old memo-section token
+  // in the heading. When the section is intentionally empty, remove the empty
+  // parentheses rather than printing "Night Memo ()".
+  output = output.replace(/Night Memo\s*\(\s*\)/gi, 'Night Memo');
   return output.replace(/\{\{[a-z0-9_]+\}\}/gi, '');
 }
 

@@ -10,7 +10,6 @@
 <body class="legacy-page template-frame-page">
   <main class="template-frame-main">
     <div id="templateFrameStatus" class="manager-status info">Loading print editor...</div>
-
     <div class="template-config-grid">
       <div class="field"><label for="templateSelect">Template version</label><select id="templateSelect"></select></div>
       <div class="field"><label for="templateName">Template name</label><input id="templateName" type="text" maxlength="100" value="Night Memo"></div>
@@ -21,7 +20,6 @@
       <button class="pill" type="button" id="previewTemplateBtn">Preview</button>
       <button class="pill primary-pill" type="button" id="publishTemplateBtn">Publish</button>
     </div>
-
     <div class="template-editor-shell">
       <div class="template-mode-row">
         <div class="mini-tabs">
@@ -30,7 +28,6 @@
         </div>
         <div class="template-help">Free text is allowed. Use Insert for live report tables and fields.</div>
       </div>
-
       <div id="visualEditorPane" class="template-pane active">
         <div class="template-toolbar" id="templateToolbar">
           <button type="button" data-cmd="bold"><b>B</b></button>
@@ -42,11 +39,10 @@
           <button type="button" data-cmd="justifyRight">Right</button>
           <span class="toolbar-sep"></span>
           <select id="templateBlockFormat"><option value="p">Paragraph</option><option value="h1">Heading 1</option><option value="h2">Heading 2</option><option value="h3">Heading 3</option></select>
-          <select id="insertTemplateToken"><option value="">Insert...</option><option value="report_date_display">Report Date</option><option value="report_date">Report Date (ISO)</option><option value="section">Memo Section</option><option value="ward_summary_table">Ward Summary Table</option><option value="infection_table">Infection / Device Table</option><option value="page_break">Page Break</option></select>
+          <select id="insertTemplateToken"><option value="">Insert...</option><option value="report_date_display">Current Submission Window</option><option value="report_date">Current Date (ISO)</option><option value="ward_summary_table">Ward Summary Table</option><option value="clinical_attention_table">Clinical Attention Table</option><option value="report_items_table">Configured Report Items Table</option><option value="infection_table">Infection / Device Table</option><option value="page_break">Page Break</option></select>
         </div>
         <div id="templateVisualEditor" class="template-visual-editor" contenteditable="true" spellcheck="true"></div>
       </div>
-
       <div id="htmlEditorPane" class="template-pane">
         <div class="html-editor-grid">
           <div class="field"><label for="templateHtmlEditor">HTML template</label><textarea id="templateHtmlEditor" rows="20" spellcheck="false"></textarea></div>
@@ -54,8 +50,7 @@
         </div>
       </div>
     </div>
-
-    <div class="template-token-reference"><strong>Available live fields:</strong> <code>{{report_date_display}}</code> <code>{{report_date}}</code> <code>{{section}}</code> <code>{{ward_summary_table}}</code> <code>{{infection_table}}</code> <code>{{page_break}}</code></div>
+    <div class="template-token-reference"><strong>Available live fields:</strong> <code>{{report_date_display}}</code> <code>{{report_date}}</code> <code>{{ward_summary_table}}</code> <code>{{clinical_attention_table}}</code> <code>{{report_items_table}}</code> <code>{{infection_table}}</code> <code>{{page_break}}</code></div>
   </main>
   <script type="module" src="./manager-template-page.js"></script>
 </body>

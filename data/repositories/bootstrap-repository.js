@@ -9,8 +9,6 @@ async function callOptionalRpc(name, args) {
   if (DB_MODE !== 'supabase') return null;
   const { data, error } = await supabase.rpc(name, args);
   if (!error) return data || null;
-  // The performance RPCs are additive. Until the SQL migration is installed,
-  // fall back to the existing repository queries instead of breaking the page.
   if (isMissingRpc(error)) return null;
   throw error;
 }
@@ -25,6 +23,12 @@ export function getWardNightSnapshot(wardId, date) {
 export function getManagerNightSnapshot(date) {
   return callOptionalRpc('get_manager_night_snapshot', {
     p_date: date,
+  });
+}
+
+export function getManagerRecentSnapshot(minutes = 120) {
+  return callOptionalRpc('get_manager_recent_snapshot', {
+    p_window_minutes: Math.max(1, Number(minutes) || 120),
   });
 }
 

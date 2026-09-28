@@ -1,12 +1,13 @@
 import { requireRole, signOut } from '../auth.js';
 import { qs, qsa, esc } from '../core/dom.js';
-import { todayISO, toDisplayDate } from '../core/dates.js';
+import { todayISO, formatDateTime } from '../core/dates.js';
 import { numberValue } from '../core/numbers.js';
 import { setAppHeader } from '../components/app-shell.js';
 import { DB_MODE } from '../data/index.js';
 import { createRequestSequencer } from '../core/request-sequencer.js';
-import { deviceCount, normalizeDevice } from '../domain/report-model.js';
-import { loadFullWardReport, loadManagerNight } from '../services/report-service.js';
+import { deviceCount, normalizeDevice, normalizeReportPayload, formatDynamic } from '../domain/report-model.js';
+import { reportSubmittedAt, SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
+import { loadFullWardReport, loadManagerCurrent } from '../services/report-service.js';
 import { renderFullReport } from '../components/report-view.js';
 
 const $ = qs;
@@ -20,6 +21,8 @@ const state = {
   items: [],
   selected: null,
   allWards: [],
+  windowMinutes: SUBMISSION_WINDOW_MINUTES,
+  refreshedAt: null,
 };
 
 bootstrap().catch(error => {
@@ -28,14 +31,12 @@ bootstrap().catch(error => {
 });
 
 async function bootstrap() {
-  setStatus('Loading manager data...', 'info');
+  setStatus('Loading current submissions...', 'info');
   bindCoreControls();
   state.access = await requireRole('manager');
   if (!state.access) return;
-  setAppHeader({ title: 'Patrol Night', subtitle: 'Nightly summary and complete ward reports', access: state.access, mode: DB_MODE });
-  const today = todayISO();
-  $('#reportDate').value = today;
-  $('#fullReportDate').value = today;
+  setAppHeader({ title: 'Patrol Night', subtitle: 'Current ward submissions and complete ward reports', access: state.access, mode: DB_MODE });
+  $('#fullReportDate').value = todayISO();
   await refresh();
   clearStatus();
 }
@@ -44,14 +45,11 @@ function bindCoreControls() {
   $('#logoutBtn').onclick = signOut;
   $('#refreshBtn').onclick = refresh;
   $('#printBtn').onclick = printNightMemo;
-  $('#reportDate').onchange = async () => {
-    $('#fullReportDate').value = $('#reportDate').value;
-    state.selected = null;
-    $('#fullReportBody').innerHTML = '<div class="manager-empty-state">Select a ward to read its complete report.</div>';
-    await refresh();
-  };
-  $('#memoSection').onchange = refresh;
   $('#fullWardSelect').onchange = loadFullWardReportView;
+  $('#fullReportDate').onchange = () => {
+    state.selected = null;
+    $('#fullReportBody').innerHTML = '<div class="manager-empty-state">Select a ward or press Load to read its complete report.</div>';
+  };
   $('#loadFullReportBtn').onclick = loadFullWardReportView;
   $('#fullReportPrintBtn').onclick = printSelectedFullReport;
   window.addEventListener('manager-tab-change', event => {
@@ -67,20 +65,21 @@ function bindCoreControls() {
 
 async function refresh() {
   const requestId = refreshRequests.begin();
-  const date = $('#reportDate').value || todayISO();
-  const section = $('#memoSection').value || 'Male';
-  setStatus('Refreshing...', 'info');
+  setStatus('Refreshing current submissions...', 'info');
   $('#summaryRows').innerHTML = '<tr><td colspan="14">Loading...</td></tr>';
   $('#infectionRows').innerHTML = '<tr><td colspan="10">Loading...</td></tr>';
+  $('#configuredItemsHost').innerHTML = '<div class="manager-empty-state">Loading report items...</div>';
+  $('#clinicalRows').innerHTML = '<tr><td colspan="3">Loading...</td></tr>';
+
   try {
-    const { items, bundle, allWards } = await loadManagerNight(date, section);
+    const { items, bundle, allWards, windowMinutes } = await loadManagerCurrent(SUBMISSION_WINDOW_MINUTES);
     if (!refreshRequests.isCurrent(requestId)) return;
     state.items = items || [];
     state.bundle = bundle || [];
     state.allWards = allWards?.length ? allWards : state.bundle.map(x => x.ward);
-    $('#sectionTitle').textContent = section;
-    $('#printDateLabel').textContent = toDisplayDate(date);
-    $('#fullReportDate').value = date;
+    state.windowMinutes = windowMinutes || SUBMISSION_WINDOW_MINUTES;
+    state.refreshedAt = new Date();
+    $('#printDateLabel').textContent = currentWindowLabel();
     fillFullWardSelect();
     renderSummary();
     clearStatus();
@@ -90,8 +89,21 @@ async function refresh() {
     console.error('Manager refresh failed:', error);
     $('#summaryRows').innerHTML = `<tr><td colspan="14">Unable to load Night Memo data: ${esc(error.message || String(error))}</td></tr>`;
     $('#infectionRows').innerHTML = '<tr><td colspan="10">Data load failed. See the message above.</td></tr>';
+    $('#configuredItemsHost').innerHTML = '<div class="manager-empty-state">Unable to load configured report items.</div>';
+    $('#clinicalRows').innerHTML = '<tr><td colspan="3">Unable to load clinical attention data.</td></tr>';
     setStatus(`Unable to load report data: ${error.message || String(error)}`, 'error');
   }
+}
+
+function currentWindowLabel() {
+  const end = state.refreshedAt || new Date();
+  const start = new Date(end.getTime() - state.windowMinutes * 60 * 1000);
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Hong_Kong',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  return `Submitted in past ${state.windowMinutes} minutes · ${fmt.format(start)} – ${fmt.format(end)} HKT`;
 }
 
 function fillFullWardSelect() {
@@ -130,10 +142,20 @@ function emptyCell(ward, report, capacity) {
   return `${parts.join(' / ')}${remarks.length ? ` - ${remarks.join('; ')}` : ''}`;
 }
 
+function submissionStatus(report) {
+  if (!report) return 'Not submitted';
+  const stamp = reportSubmittedAt(report);
+  if (!stamp) return 'Submitted';
+  const time = new Date(stamp).toLocaleTimeString('en-GB', {
+    timeZone: 'Asia/Hong_Kong', hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  return `Submitted ${time}`;
+}
+
 function buildSummaryRows(includeStatus = true) {
   return state.bundle.map(({ ward, capacity, report }) => {
     const D = report?.payload || {};
-    const statusCell = includeStatus ? `<td class="screen-only-col">${report ? 'Submitted' : 'Not submitted'}</td>` : '';
+    const statusCell = includeStatus ? `<td class="screen-only-col">${esc(submissionStatus(report))}</td>` : '';
     return `<tr class="${report ? 'submitted' : 'missing'}">
       <td class="ward-link" data-ward="${esc(ward.id)}">${esc(ward.code)}</td>
       <td>${esc(D.admissionEC ?? '--')}</td><td>${esc(D.admissionCC ?? '--')}</td><td>${esc(D.transferIn ?? '--')}</td>
@@ -156,15 +178,99 @@ function buildInfectionRows() {
   }).join('');
 }
 
+function valueForItem(item, rawPayload) {
+  if (!rawPayload) return '--';
+  const D = normalizeReportPayload(rawPayload);
+  if (item.key in D && !['infBeds', 'devBeds', 'dynamicItems'].includes(item.key)) {
+    const value = D[item.key];
+    return Array.isArray(value) ? (value.length ? value.join(', ') : '--') : (value ?? '--');
+  }
+  if (item.section === 'infection') return bedText(D.infBeds?.[item.key]);
+  if (item.section === 'devices') return devText(D.devBeds?.[item.key]);
+  const dynamic = D.dynamicItems?.[item.key];
+  const formatted = formatDynamic(dynamic);
+  return formatted || '--';
+}
+
+function configuredItemsTableHtml() {
+  const items = [...state.items].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+  if (!items.length) return '<div class="manager-empty-state">No active report items are configured.</div>';
+  const head = items.map(item => `<th>${esc(item.label)}</th>`).join('');
+  const body = state.bundle.map(({ ward, report }) => `<tr>
+    <td class="ward-link" data-ward="${esc(ward.id)}">${esc(ward.code)}</td>
+    ${items.map(item => `<td>${esc(valueForItem(item, report?.payload))}</td>`).join('')}
+  </tr>`).join('');
+  return `<div class="table-scroll print-table-scroll"><table class="data-table manager-summary configured-report-items"><thead><tr><th>Ward</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+function clinicalAttentionEntries() {
+  const entries = [];
+  for (const { ward, report } of state.bundle) {
+    if (!report) continue;
+    const D = normalizeReportPayload(report.payload);
+    if (!D.nilSpecial) {
+      for (const row of D.patients || []) {
+        if (!row.some(Boolean)) continue;
+        entries.push({ ward, type: 'Patient condition', text: [row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ') });
+      }
+    }
+    if (!D.nilConsultation) {
+      for (const row of D.consultations || []) {
+        if (!row.some(Boolean)) continue;
+        entries.push({ ward, type: 'Consultation', text: [row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ') });
+      }
+    }
+    if (!D.nilIntubation) {
+      for (const row of D.intubations || []) {
+        if (!row.some(Boolean)) continue;
+        const text = [
+          row[0] && `Bed ${row[0]}`,
+          row[1],
+          row[2] && `Dx: ${row[2]}`,
+          row[3] && `Reason: ${row[3]}`,
+          row[4],
+          row[5] && `By: ${row[5]}`,
+          row[6] && `Location: ${row[6]}`,
+          row[7] && `Outcome: ${row[7]}`,
+        ].filter(Boolean).join(' · ');
+        entries.push({ ward, type: 'Intubation', text });
+      }
+    }
+  }
+  return entries;
+}
+
+function clinicalAttentionRowsHtml() {
+  const entries = clinicalAttentionEntries();
+  if (!entries.length) return '<tr><td colspan="3">No patient-condition, consultation or intubation text was submitted in the current window.</td></tr>';
+  return entries.map(entry => `<tr><td class="ward-link" data-ward="${esc(entry.ward.id)}">${esc(entry.ward.code)}</td><td>${esc(entry.type)}</td><td>${esc(entry.text || '--')}</td></tr>`).join('');
+}
+
+function clinicalAttentionTableHtml() {
+  return `<div class="table-scroll print-table-scroll"><table class="data-table manager-summary"><thead><tr><th>Ward</th><th>Type</th><th>Details</th></tr></thead><tbody>${clinicalAttentionRowsHtml()}</tbody></table></div>`;
+}
+
 function renderSummary() {
-  $('#summaryRows').innerHTML = buildSummaryRows(true) || '<tr><td colspan="14">No wards configured for this section/date.</td></tr>';
+  $('#summaryRows').innerHTML = buildSummaryRows(true) || '<tr><td colspan="14">No wards are currently configured.</td></tr>';
   $('#infectionRows').innerHTML = buildInfectionRows() || '<tr><td colspan="10">No wards configured.</td></tr>';
+  $('#configuredItemsHost').innerHTML = configuredItemsTableHtml();
+  $('#clinicalRows').innerHTML = clinicalAttentionRowsHtml();
   $$('.ward-link').forEach(el => { el.onclick = () => openWard(el.dataset.ward); });
 }
 
 async function openWard(wardId) {
   $('#fullWardSelect').value = wardId;
+  const entry = state.bundle.find(x => x.ward.id === wardId);
   window.showManagerPage?.('full');
+  if (entry?.report) {
+    const items = entry.report.report_item_snapshot?.length
+      ? entry.report.report_item_snapshot.map(item => ({ ...item, __historical: true }))
+      : state.items;
+    state.selected = { ward: entry.ward, report: entry.report, capacity: entry.capacity, items };
+    $('#fullReportDate').value = entry.report.report_date || todayISO();
+    $('#fullReportBody').innerHTML = renderFullReport(state.selected);
+    return;
+  }
   await loadFullWardReportView();
 }
 
@@ -176,7 +282,7 @@ async function loadFullWardReportView() {
     $('#fullReportBody').innerHTML = '<div class="manager-empty-state">Select a ward to read its complete report.</div>';
     return;
   }
-  const date = $('#reportDate').value;
+  const date = $('#fullReportDate').value || todayISO();
   const ward = state.allWards.find(w => w.id === wardId);
   if (!ward) return;
   setStatus(`Loading ${ward.code}...`, 'info');
@@ -201,7 +307,7 @@ async function printSelectedFullReport() {
   const shellCss = new URL('../css/legacy-shell.css', import.meta.url).href;
   const managerCss = new URL('../css/manager.css', import.meta.url).href;
   const printCss = new URL('../css/print.css', import.meta.url).href;
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(state.selected.ward.code)} ${esc($('#reportDate').value)}</title><link rel="stylesheet" href="${shellCss}"><link rel="stylesheet" href="${managerCss}"><link rel="stylesheet" href="${printCss}"></head><body class="legacy-page"><main class="legacy-shell"><div class="legacy-panel-body">${html}</div></main><script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(state.selected.ward.code)} ${esc($('#fullReportDate').value)}</title><link rel="stylesheet" href="${shellCss}"><link rel="stylesheet" href="${managerCss}"><link rel="stylesheet" href="${printCss}"></head><body class="legacy-page"><main class="legacy-shell"><div class="legacy-panel-body">${html}</div></main><script>setTimeout(()=>window.print(),500)<\/script></body></html>`);
   win.document.close();
 }
 
@@ -216,13 +322,15 @@ function printNightMemo() {
 }
 
 function templateContext() {
-  const date = $('#reportDate')?.value || '';
   return {
-    reportDate: date,
-    reportDateDisplay: toDisplayDate(date),
-    section: $('#memoSection')?.value || '',
+    reportDate: todayISO(),
+    reportDateDisplay: currentWindowLabel(),
+    section: '',
+    snapshotTime: state.refreshedAt ? formatDateTime(state.refreshedAt) : '',
     wardSummaryTableHtml: managerSummaryTableHtml(),
     infectionTableHtml: infectionTableHtml(),
+    reportItemsTableHtml: configuredItemsTableHtml(),
+    clinicalAttentionTableHtml: clinicalAttentionTableHtml(),
   };
 }
 

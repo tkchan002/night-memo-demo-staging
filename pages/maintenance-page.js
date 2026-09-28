@@ -2,7 +2,7 @@ import { requireRole, signOut } from '../auth.js';
 import {
   getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
-  getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, getAuditLog,
+  getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, reorderReportItems, getAuditLog,
   getMaintenanceWardsSnapshot,
 } from '../data/index.js';
 import { qs, qsa, esc } from '../core/dom.js';
@@ -217,8 +217,40 @@ function appendMaintStaffEditor(s = { role: 'RN', name: '', appointment_date: ''
   qs('#maintStaffRows').append(tr);
 }
 function renderItems() {
-  $('#itemRows').innerHTML = [...state.items].sort((a, b) => a.sort_order - b.sort_order).map(i => `<tr><td>${esc(i.sort_order)}</td><td>${esc(i.section)}</td><td>${esc(i.label)}${i.builtin ? ' <span class="tag subtle">Built-in</span>' : ''}</td><td>${esc(i.input_type)}</td><td>${esc(toDisplayDate(i.effective_from || ''))}${i.effective_to ? ` – ${esc(toDisplayDate(i.effective_to))}` : ''}</td><td>${i.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Inactive</span>'}</td><td><button class="btn secondary small" data-edit-item="${esc(i.id)}">Edit</button></td></tr>`).join('');
+  const sorted = [...state.items].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+  $('#itemRows').innerHTML = sorted.map((i, index) => `<tr>
+    <td>${esc(i.sort_order)}</td>
+    <td>${esc(i.section)}</td>
+    <td>${esc(i.label)}${i.builtin ? ' <span class="tag subtle">Built-in</span>' : ''}</td>
+    <td>${esc(i.input_type)}</td>
+    <td>${esc(toDisplayDate(i.effective_from || ''))}${i.effective_to ? ` – ${esc(toDisplayDate(i.effective_to))}` : ''}</td>
+    <td>${i.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Inactive</span>'}</td>
+    <td><div class="inline-actions">
+      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move up">↑</button>
+      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="1" ${index === sorted.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+      <button class="btn secondary small" data-edit-item="${esc(i.id)}">Edit</button>
+    </div></td>
+  </tr>`).join('');
   qsa('[data-edit-item]').forEach(b => { b.onclick = () => openItemModal(state.items.find(i => i.id === b.dataset.editItem)); });
+  qsa('[data-move-item]').forEach(b => { b.onclick = () => moveReportItem(b.dataset.moveItem, Number(b.dataset.moveDelta)); });
+}
+
+async function moveReportItem(itemId, delta) {
+  const sorted = [...state.items].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+  const index = sorted.findIndex(item => item.id === itemId);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= sorted.length) return;
+  [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
+  const reordered = sorted.map((item, position) => ({ ...item, sort_order: (position + 1) * 10 }));
+  try {
+    await reorderReportItems(reordered);
+    state.items = reordered;
+    renderItems();
+    flash('Report item order updated. Manager view uses this order immediately on refresh.', 'success');
+  } catch (error) {
+    flash(error.message || String(error), 'error', 7000);
+    await ensureItemsLoaded(true);
+  }
 }
 function openItemModal(i = null) {
   state.editingItem = i; $('#itemModalTitle').textContent = i ? 'Edit Report Item' : 'Add Report Item'; $('#itemId').value = i?.id || ''; $('#itemBuiltin').value = i?.builtin ? 'true' : 'false';

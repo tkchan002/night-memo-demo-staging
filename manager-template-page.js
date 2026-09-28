@@ -3,7 +3,10 @@ let context = {
   reportDate: '',
   reportDateDisplay: '',
   section: '',
+  snapshotTime: '',
   wardSummaryTableHtml: '',
+  clinicalAttentionTableHtml: '',
+  reportItemsTableHtml: '',
   infectionTableHtml: '',
 };
 

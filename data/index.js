@@ -7,9 +7,9 @@ export {
   addOperatingPeriod, closeOperatingPeriod, addCapacity,
 } from './repositories/ward-repository.js';
 export { getWardStaff, saveWardStaff, setStaffActive } from './repositories/staff-repository.js';
-export { getReportItems, saveReportItem } from './repositories/report-item-repository.js';
-export { getWardReport, getReportsForDate, getRecentReports, getPreviousReport, upsertWardReport } from './repositories/report-repository.js';
+export { getReportItems, saveReportItem, reorderReportItems } from './repositories/report-item-repository.js';
+export { getWardReport, getReportsForDate, getReportsSince, getRecentReports, getPreviousReport, saveWardReportSession, upsertWardReport } from './repositories/report-repository.js';
 export { getAccounts, adminAccount } from './repositories/account-repository.js';
 export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
 export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
-export { getWardNightSnapshot, getManagerNightSnapshot, getMaintenanceWardsSnapshot } from './repositories/bootstrap-repository.js';
+export { getWardNightSnapshot, getManagerNightSnapshot, getManagerRecentSnapshot, getMaintenanceWardsSnapshot } from './repositories/bootstrap-repository.js';

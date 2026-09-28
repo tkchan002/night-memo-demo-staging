@@ -32,3 +32,34 @@ export async function saveReportItem(item) {
   await recordAudit(item.id ? 'report_item.update' : 'report_item.create', 'report_item', data.id, { key: data.key, label: data.label });
   return data;
 }
+
+export async function reorderReportItems(orderedItems) {
+  const rows = (orderedItems || []).filter(x => x?.id).map((item, index) => ({
+    id: item.id,
+    sort_order: Number.isFinite(Number(item.sort_order)) ? Number(item.sort_order) : (index + 1) * 10,
+  }));
+  if (!rows.length) return [];
+
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const order = new Map(rows.map(row => [row.id, row.sort_order]));
+    state.report_items.forEach(item => {
+      if (order.has(item.id)) item.sort_order = order.get(item.id);
+    });
+    demoWrite(state);
+    return state.report_items.slice().sort((a, b) => a.sort_order - b.sort_order);
+  }
+
+  const results = await Promise.all(rows.map(async row => {
+    const { data, error } = await supabase
+      .from('report_items')
+      .update({ sort_order: row.sort_order, updated_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }));
+  await recordAudit('report_item.reorder', 'report_item', null, { order: rows.map(r => r.id) });
+  return results.sort((a, b) => a.sort_order - b.sort_order);
+}

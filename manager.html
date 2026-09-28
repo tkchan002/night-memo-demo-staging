@@ -13,7 +13,7 @@
     <div class="legacy-window-title no-print">
       <div>
         <div class="legacy-title-text" id="appTitle">Patrol Night</div>
-        <div class="legacy-subtitle" id="appSubtitle">Nightly summary and complete ward reports</div>
+        <div class="legacy-subtitle" id="appSubtitle">Current ward submissions and complete ward reports</div>
       </div>
       <div class="legacy-spacer"></div>
       <div id="modeBadge"></div>
@@ -32,21 +32,13 @@
 
       <section class="legacy-page-view active" data-manager-page="summary">
         <div class="manager-controls no-print">
-          <div class="field">
-            <label for="reportDate">Night Memo Date</label>
-            <input id="reportDate" type="date">
-          </div>
-          <div class="field">
-            <label for="memoSection">Memo Section</label>
-            <select id="memoSection"><option>Male</option><option>Female</option><option>Other</option></select>
-          </div>
           <button type="button" class="pill" id="refreshBtn">Refresh</button>
-          <div class="status-note">Click any ward name to open the complete report.</div>
+          <div class="status-note">Submission status is based on the latest memo submitted within the past 2 hours, not on calendar date. Click any ward name to open its complete current report.</div>
         </div>
 
         <div id="summaryPrintArea">
           <div class="summary-title">
-            <h1>Night Memo (<span id="sectionTitle">Male</span>)</h1>
+            <h1>Night Memo</h1>
             <div class="summary-date" id="printDateLabel"></div>
           </div>
 
@@ -60,6 +52,23 @@
                 <tbody id="summaryRows"><tr><td colspan="14">Loading...</td></tr></tbody>
               </table>
             </div>
+          </section>
+
+          <section class="summary-section">
+            <h2>Clinical Attention</h2>
+            <div class="status-note">Only patient-condition, consultation and intubation text submitted in the current 2-hour window is shown here.</div>
+            <div class="table-scroll">
+              <table class="data-table manager-summary">
+                <thead><tr><th>Ward</th><th>Type</th><th>Details</th></tr></thead>
+                <tbody id="clinicalRows"><tr><td colspan="3">Loading...</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="summary-section">
+            <h2>Report Items — Configured Order</h2>
+            <div class="status-note">Column order follows Report Items → Order in Maintenance.</div>
+            <div id="configuredItemsHost"><div class="manager-empty-state">Loading...</div></div>
           </section>
 
           <section class="summary-section">
@@ -83,7 +92,7 @@
           </div>
           <div class="field">
             <label for="fullReportDate">Report Date</label>
-            <input id="fullReportDate" type="date" readonly>
+            <input id="fullReportDate" type="date">
           </div>
           <button type="button" class="pill" id="loadFullReportBtn">Load</button>
           <button type="button" class="pill" id="fullReportPrintBtn">Print Full Report</button>
