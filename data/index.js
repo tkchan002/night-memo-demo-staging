@@ -13,3 +13,4 @@ export { getAccounts, adminAccount } from './repositories/account-repository.js'
 export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
 export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
 export { getWardNightSnapshot, getManagerNightSnapshot, getManagerRecentSnapshot, getMaintenanceWardsSnapshot } from './repositories/bootstrap-repository.js';
+export { importGeneratedDemoBatch, listGeneratedDemoBatches, deleteGeneratedDemoBatch } from './repositories/demo-data-repository.js';

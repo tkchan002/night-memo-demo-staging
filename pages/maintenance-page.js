@@ -1,15 +1,18 @@
 import { requireRole, signOut } from '../auth.js';
+import { CONFIG } from '../config.js';
 import {
   getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
-  getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, reorderReportItems, getAuditLog,
-  getMaintenanceWardsSnapshot,
+  getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, reorderReportItems, getAuditLog, recordAudit,
+  getMaintenanceWardsSnapshot, getCapacitiesForWards,
+  importGeneratedDemoBatch, listGeneratedDemoBatches, deleteGeneratedDemoBatch,
 } from '../data/index.js';
 import { qs, qsa, esc } from '../core/dom.js';
 import { todayISO, toDisplayDate, formatDateTime } from '../core/dates.js';
 import { flash } from '../core/ui.js';
 import { setAppHeader } from '../components/app-shell.js';
 import { DB_MODE } from '../data/index.js';
+import { DEMO_SCENARIOS, generateDemoDataBundle, summarizeGeneratedReport } from '../domain/demo-generator.js';
 
 const $ = qs;
 const state = {
@@ -23,6 +26,7 @@ const state = {
   editingWard: null,
   loaded: { wards: false, accounts: false, items: false },
   loading: {},
+  demoPrepared: null,
 };
 
 init().catch(error => { console.error(error); flash(error.message || String(error), 'error', 8000); });
@@ -31,6 +35,7 @@ async function init() {
   state.access = await requireRole('maintenance');
   if (!state.access) return;
   setAppHeader({ title: 'Night Memo Maintenance', subtitle: 'Configuration and lifecycle console', access: state.access, mode: DB_MODE });
+  installGeneratedDemoUI();
   bind();
   // Only the visible Wards tab is on the initial critical path. Accounts,
   // Report Items, Staff and Audit are fetched only when the user opens them.
@@ -66,6 +71,7 @@ async function showPage(name) {
     if (name === 'staff') { await ensureWardsLoaded(); await renderMaintStaff(); }
     if (name === 'items') await ensureItemsLoaded();
     if (name === 'audit') await renderAudit();
+    if (name === 'demo') await renderGeneratedDemoBatches();
   } catch (error) {
     console.error(`Unable to load maintenance tab ${name}:`, error);
     flash(error.message || String(error), 'error', 7000);
@@ -267,3 +273,190 @@ async function saveItem(event) {
   } catch (error) { flash(error.message || String(error), 'error', 7000); }
 }
 async function renderAudit() { const rows = await getAuditLog(200); $('#auditRows').innerHTML = rows.length ? rows.map(r => `<div class="audit-row"><b>${esc(formatDateTime(r.occurred_at))}</b> · <code>${esc(r.action)}</code> · ${esc(r.entity_type || '')} ${esc(r.entity_id || '')}<div class="muted">${esc(JSON.stringify(r.details || {}))}</div></div>`).join('') : '<div class="muted">No audit entries yet.</div>'; }
+
+
+function testToolsEnabled() {
+  const queryEnabled = new URLSearchParams(location.search).get('test-tools') === '1';
+  return DB_MODE === 'supabase' && (CONFIG.ENABLE_TEST_TOOLS === true || queryEnabled);
+}
+
+function installGeneratedDemoUI() {
+  if (!testToolsEnabled()) return;
+  const tabs = document.querySelector('.maintenance-tabs');
+  const body = document.querySelector('.legacy-panel-body');
+  if (!tabs || !body || document.querySelector('[data-maint="demo"]')) return;
+
+  const tab = document.createElement('button');
+  tab.type = 'button';
+  tab.className = 'tab';
+  tab.dataset.maint = 'demo';
+  tab.textContent = 'Test Data';
+  tabs.append(tab);
+
+  const scenarioOptions = Object.entries(DEMO_SCENARIOS)
+    .map(([value, config]) => `<option value="${esc(value)}">${esc(config.label)}</option>`)
+    .join('');
+
+  const section = document.createElement('section');
+  section.className = 'maint-page';
+  section.dataset.maintPage = 'demo';
+  section.innerHTML = `
+    <div class="section-title">Generated Demo Data</div>
+    <p class="muted">Maintenance-only test tool. It reads the current active wards, real bed capacities and current report-item configuration, then generates synthetic Night Memo reports. No real patient data is copied. Imported reports are normal <code>ward_reports</code> rows, so Manager, Ward History and printing treat them exactly like ordinary submissions.</p>
+    <div class="legacy-card" style="margin:12px 0;padding:14px">
+      <div class="inline-fields" style="align-items:flex-end;gap:10px;flex-wrap:wrap">
+        <div class="field" style="min-width:240px"><label>Scenario</label><select id="demoScenario">${scenarioOptions}</select></div>
+        <button type="button" class="btn secondary" id="demoGenerateBtn">Generate Preview</button>
+        <button type="button" class="btn" id="demoImportBtn" disabled>Import Generated Batch</button>
+      </div>
+      <div id="demoImportStatus" class="muted" style="margin-top:10px">Generate a preview first. Nothing is written to Supabase until you import the generated batch.</div>
+      <div id="demoImportPreview" style="margin-top:12px"></div>
+    </div>
+    <div class="section-title" style="margin-top:20px">Generated Test Batches</div>
+    <p class="muted">Each imported batch is tracked separately. Deleting a batch removes only the exact reports generated by that batch, not unrelated reports from the same ward or date.</p>
+    <div id="demoBatchRows"><div class="muted">Open this tab to load generated batches.</div></div>`;
+  body.append(section);
+
+  $('#demoGenerateBtn').addEventListener('click', generateDemoPreview);
+  $('#demoImportBtn').addEventListener('click', commitGeneratedDemo);
+}
+
+function setDemoStatus(message, type = 'muted') {
+  const el = $('#demoImportStatus');
+  if (!el) return;
+  el.className = type;
+  el.textContent = message;
+}
+
+async function generateDemoPreview() {
+  state.demoPrepared = null;
+  $('#demoImportBtn').disabled = true;
+  $('#demoImportPreview').innerHTML = '';
+  const button = $('#demoGenerateBtn');
+  button.disabled = true;
+  setDemoStatus('Reading current ward configuration and generating realistic synthetic reports...');
+  try {
+    await ensureWardsLoaded();
+    await ensureItemsLoaded();
+    const date = todayISO();
+    const activeWards = state.wards.filter(ward => state.periods.some(period => period.ward_id === ward.id
+      && period.start_date <= date
+      && (!period.end_date || period.end_date >= date)));
+    if (!activeWards.length) throw new Error('No active wards are configured for today.');
+    const capacities = await getCapacitiesForWards(activeWards.map(ward => ward.id), date);
+    const scenario = $('#demoScenario').value || 'typical';
+    const seed = Date.now();
+    const bundle = generateDemoDataBundle({
+      wards: state.wards,
+      periods: state.periods,
+      capacities,
+      items: state.items,
+      scenario,
+      reportDate: date,
+      now: new Date(),
+      seed,
+    });
+    state.demoPrepared = bundle;
+    $('#demoImportBtn').disabled = false;
+    setDemoStatus(`${bundle.meta.active_wards} active wards generated from the current configuration. Nothing has been imported yet.`);
+    renderGeneratedDemoPreview(bundle);
+  } catch (error) {
+    setDemoStatus(error.message || String(error), 'error');
+    flash(error.message || String(error), 'error', 9000);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function renderGeneratedDemoPreview(bundle) {
+  const currentByWard = new Map(bundle.reports.filter(report => report.session === 'current').map(report => [report.ward_code, report]));
+  const previousByWard = new Map(bundle.reports.filter(report => report.session === 'previous').map(report => [report.ward_code, report]));
+  const wardCodes = [...previousByWard.keys()];
+  const rows = wardCodes.map(code => {
+    const current = currentByWard.get(code);
+    const previous = previousByWard.get(code);
+    const summary = current ? summarizeGeneratedReport(current) : null;
+    return `<tr>
+      <td><b>${esc(code)}</b></td>
+      <td>${current ? `<span class="tag">Submitted ${esc(formatDateTime(current.submitted_at))}</span>` : '<span class="tag subtle">Not submitted in current window</span>'}</td>
+      <td>${current ? `${esc(summary.total)} / ${esc(current.preview_capacity)} patients · ${esc(summary.empty)} empty` : '—'}</td>
+      <td>${current ? esc(summary.clinical) : '—'}</td>
+      <td>${previous ? esc(formatDateTime(previous.submitted_at)) : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  $('#demoImportPreview').innerHTML = `
+    <div class="legacy-card" style="margin-bottom:10px;padding:10px">
+      <b>${esc(DEMO_SCENARIOS[bundle.scenario]?.label || bundle.scenario)}</b><br>
+      <span class="muted">${esc(bundle.description)}</span><br>
+      <span class="muted">${esc(bundle.meta.previous_session_reports)} previous-session reports · ${esc(bundle.meta.current_submissions)} current submissions · ${esc(bundle.meta.not_yet_submitted)} not yet submitted · ${esc(bundle.meta.current_clinical_attention_wards)} current clinical-attention wards · ${esc(bundle.meta.current_intubation_wards)} current intubation wards</span>
+    </div>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Ward</th><th>Current window</th><th>Occupancy</th><th>Clinical attention</th><th>Previous session</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function commitGeneratedDemo() {
+  if (!state.demoPrepared) return;
+  const bundle = state.demoPrepared;
+  const count = bundle.reports.length;
+  if (!confirm(`Import ${count} generated reports into the normal ward_reports table? Manager, Ward History and printing will treat them as ordinary submissions.`)) return;
+  const button = $('#demoImportBtn');
+  button.disabled = true;
+  setDemoStatus('Importing generated reports into Supabase...');
+  try {
+    const result = await importGeneratedDemoBatch(bundle);
+    await recordAudit('demo_data_generate', 'demo_data_batch', result?.batch_id || null, {
+      scenario: bundle.scenario,
+      seed: bundle.seed,
+      report_count: result?.report_count ?? count,
+      active_wards: bundle.meta.active_wards,
+      current_submissions: bundle.meta.current_submissions,
+    });
+    flash(`${result?.report_count ?? count} generated reports imported as normal Night Memo reports.`, 'success', 8000);
+    setDemoStatus('Import complete. Other parts of Night Memo can now read these reports normally.');
+    state.demoPrepared = null;
+    $('#demoImportPreview').innerHTML = '';
+    await renderGeneratedDemoBatches();
+  } catch (error) {
+    button.disabled = false;
+    setDemoStatus(error.message || String(error), 'error');
+    flash(error.message || String(error), 'error', 10000);
+  }
+}
+
+async function renderGeneratedDemoBatches() {
+  const host = $('#demoBatchRows');
+  if (!host) return;
+  host.innerHTML = '<div class="muted">Loading generated batches...</div>';
+  try {
+    const rows = await listGeneratedDemoBatches();
+    if (!rows.length) {
+      host.innerHTML = '<div class="muted">No tracked generated demo batches.</div>';
+      return;
+    }
+    host.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th>Imported</th><th>Scenario</th><th>Description</th><th>Reports</th><th></th></tr></thead><tbody>${rows.map(row => `
+      <tr>
+        <td>${esc(formatDateTime(row.generated_at))}</td>
+        <td>${esc(DEMO_SCENARIOS[row.scenario]?.label || row.scenario || 'Generated')}</td>
+        <td>${esc(row.description || '')}</td>
+        <td>${esc(row.report_count ?? 0)}</td>
+        <td><button type="button" class="btn danger small" data-delete-demo-batch="${esc(row.id)}">Delete Batch</button></td>
+      </tr>`).join('')}</tbody></table></div>`;
+    qsa('[data-delete-demo-batch]').forEach(button => {
+      button.onclick = () => removeGeneratedDemoBatch(button.dataset.deleteDemoBatch);
+    });
+  } catch (error) {
+    host.innerHTML = `<div class="error">${esc(error.message || String(error))}</div>`;
+  }
+}
+
+async function removeGeneratedDemoBatch(batchId) {
+  if (!confirm('Delete every report generated by this test batch? Unrelated Night Memo reports will not be touched.')) return;
+  try {
+    const result = await deleteGeneratedDemoBatch(batchId);
+    await recordAudit('demo_data_delete', 'demo_data_batch', batchId, { report_count: result?.deleted_reports ?? null });
+    flash(`${result?.deleted_reports ?? 'Demo'} generated reports deleted.`, 'success');
+    await renderGeneratedDemoBatches();
+  } catch (error) {
+    flash(error.message || String(error), 'error', 10000);
+  }
+}
