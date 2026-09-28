@@ -6,10 +6,10 @@
   <title>Ward Night Memo</title>
   <link rel="stylesheet" href="./css/legacy-shell.css">
   <link rel="stylesheet" href="./css/ward.css">
+  <link rel="stylesheet" href="./css/ward-draft-submit.css">
 </head>
 <body class="legacy-page ward-page">
 <div id="statusBox"></div>
-
 <!-- Legacy-style Get Data confirmation modal -->
 <div id="gdOverlay">
   <div id="gdModal" role="dialog" aria-modal="true" aria-labelledby="gdTitleText">
@@ -26,17 +26,18 @@
     </div>
   </div>
 </div>
-
 <div id="appWrapper">
   <!-- Left history sidebar -->
   <div id="histSidebar">
     <div id="histSidebarTitle">History</div>
     <div id="histEntryList"><div id="histEmpty">No saved entries yet.</div></div>
   </div>
-
   <!-- Main app -->
   <div class="app">
     <div id="liveIndicator"></div>
+    <div id="submissionBanner" class="submission-banner pending">
+      <strong>Current memo cycle:</strong><span>Checking submission status...</span>
+    </div>
     <div class="tab-strip" id="tabStrip">
       <button type="button" class="tab active" data-main-tab="0" onclick="sT(0)">Header</button>
       <button type="button" class="tab" data-main-tab="1" onclick="sT(1)">Admission / Bed Count</button>
@@ -45,7 +46,6 @@
       <button type="button" class="tab" data-main-tab="4" onclick="sT(4)">Consultation / Intubation</button>
       <button type="button" class="tab" data-main-tab="5" onclick="sT(5)">Night Nurse</button>
     </div>
-
     <div class="main-panel">
       <div id="formWrap">
         <!-- Tab 0 -->
@@ -55,7 +55,6 @@
           <div class="fr"><span class="fl"><b>Tel:</b></span><span class="fc" id="wardContact" style="font-size:1.1rem">—</span></div>
           <div class="fr"><span class="fl"><b>Date:</b></span><span class="fc"><input type="date" id="memoDate"></span></div>
         </div>
-
         <!-- Tab 1 -->
         <div class="tp" id="t1">
           <button class="btn-get-corner" onclick="getDataForTab(1)">Get Data</button>
@@ -76,7 +75,7 @@
             <div style="font-weight:700;margin-bottom:6px">Empty Bed Information</div>
             <div id="emptyDetailRows"></div>
             <button class="btn-s" onclick="addEmptyDetail()">+ Add Empty Bed Detail</button>
-            <div class="legacy-subtle" style="margin-top:5px">Gender is recorded only here for wards with dynamic male/female bed assignment.</div>
+            <div class="legacy-subtle" style="margin-top:5px">Gender is recorded only here for wards with mixed male/female bed assignment.</div>
           </div>
           <div id="dynamicAdmissionRows"></div>
           <hr class="sep">
@@ -84,7 +83,6 @@
           <div id="ebRows"></div>
           <button class="btn-s" onclick="addEB()">+ Add Early Bird</button>
         </div>
-
         <!-- Tab 2 -->
         <div class="tp" id="t2">
           <button class="btn-get-corner" onclick="getDataForTab(2)">Get Data</button>
@@ -109,7 +107,6 @@
           <button class="btn-s" onclick="maintenanceManagedNotice()">+ Add Device</button>
           <div id="dynamicAdditionalWrap" class="hidden"><hr class="sep"><div class="sec-title" style="font-size:1.15rem;margin-top:8px">Additional Report Items</div><div id="dynamicAdditionalRows"></div></div>
         </div>
-
         <!-- Tab 3 -->
         <div class="tp" id="t3">
           <button class="btn-get-corner" onclick="getDataForTab(3)">Get Data</button>
@@ -120,7 +117,6 @@
             <button class="btn-s" onclick="addPt()">+ Add Patient</button>
           </div>
         </div>
-
         <!-- Tab 4 -->
         <div class="tp" id="t4">
           <button class="btn-get-corner" onclick="getDataForTab(4)">Get Data</button>
@@ -143,7 +139,6 @@
             <button class="btn-s" onclick="addIt()">+ Add Row</button>
           </div>
         </div>
-
         <!-- Tab 5 -->
         <div class="tp" id="t5">
           <button class="btn-get-corner" onclick="getDataForTab(5)">Get Data</button>
@@ -160,9 +155,7 @@
           <div class="fr"><span class="fl">Appointment:</span><span class="fc"><input type="text" id="sigAppt" class="w280"></span></div>
         </div>
       </div><!-- /#formWrap -->
-
       <div id="histIdle">Select an entry from the History panel on the left to view it.</div>
-
       <div id="staffListWrap">
         <div style="background:#3273C6;color:#fff;padding:10px 16px;font-size:1.1rem;font-weight:700;">Staff Database Management</div>
         <div style="padding:16px;">
@@ -171,7 +164,6 @@
           <button class="btn-s" onclick="addStaffRow()">+ Add Staff</button>
         </div>
       </div>
-
       <div id="histDetailWrap">
         <div id="histViewBanner" style="background:#3273C6;color:#fff;padding:7px 16px;font-size:0.95rem;font-weight:700;display:flex;align-items:center;gap:12px;"><span id="histViewLabel">Viewing: --</span><span id="histViewSavedAt" style="font-weight:400;font-size:0.85rem;opacity:0.85;"></span></div>
         <div class="hd-tab-strip">
@@ -184,12 +176,11 @@
         <div id="hd0" class="hd-section active"></div><div id="hd1" class="hd-section"></div><div id="hd2" class="hd-section"></div><div id="hd3" class="hd-section"></div><div id="hd4" class="hd-section"></div>
       </div>
     </div><!-- /.main-panel -->
-
     <div class="btn-bar">
       <div id="normalBar">
-        <button class="pill" onclick="saveEntry()">Save</button>
+        <button class="pill" id="saveBtn" onclick="saveEntry()">Save</button>
+        <button class="pill submit-pill" id="submitBtn" onclick="submitEntry()">Submit</button>
         <button class="pill" onclick="handleGen('print')">Print</button>
-        <button class="pill" onclick="handleGen('download')">Save PDF</button>
         <button class="pill" onclick="openPdfSettings()">Preview</button>
         <button class="pill" onclick="toggleHistory()">History</button>
         <button class="pill" onclick="toggleStaffList()">Staff List</button>
@@ -199,7 +190,6 @@
       <div id="histBar"><button class="pill" id="hbReprint" disabled onclick="histReprint()">Reprint</button><button class="pill" id="hbDelete" disabled onclick="histDeleteCurrent()">Delete</button><button class="pill" onclick="toggleHistory()">Cancel</button></div>
       <div id="staffBar"><button class="pill" onclick="toggleStaffList()">Close</button></div>
     </div>
-
     <!-- Original Night Memo print preview / font controls, now backed by Supabase report data. -->
     <div id="pdfSettingsModal">
       <div class="pdf-settings-content">
@@ -207,7 +197,6 @@
           <h3 style="margin:0;font-size:1.1rem;color:#333;">PDF Preview</h3>
           <div style="display:flex;gap:8px;">
             <button class="pill" onclick="printPdf()">Print</button>
-            <button class="pill" onclick="applyPdfSettings()">Save PDF</button>
             <button class="pill" onclick="closePdfSettings()">Close</button>
           </div>
         </div>
@@ -261,7 +250,6 @@
     </div>
   </div><!-- /.app -->
 </div>
-
 <script>
 // Main-tab controller is intentionally plain JavaScript (not an ES module).
 // It remains available even if authentication/database/print modules fail to load.
@@ -271,7 +259,6 @@
     var buttons=document.querySelectorAll('#tabStrip .tab');
     var panels=document.querySelectorAll('#formWrap .tp');
     if(!Number.isInteger(n) || n<0 || n>=buttons.length || n>=panels.length) return;
-
     // Always restore the ordinary form when a main tab is chosen.  This prevents
     // History/Staff mode from leaving the tab rail permanently disabled.
     var form=document.getElementById('formWrap');
@@ -290,7 +277,6 @@
     if(normal) normal.style.display='flex';
     if(histBar) histBar.classList.remove('show');
     if(staffBar) staffBar.classList.remove('show');
-
     buttons.forEach(function(b,i){b.classList.toggle('active',i===n);});
     panels.forEach(function(panel,i){panel.classList.toggle('active',i===n);});
 
@@ -298,7 +284,6 @@
     document.dispatchEvent(new CustomEvent('ward-main-tab-selected',{detail:{index:n}}));
   }
   window.sT=rawSwitchMainTab;
-
   // Capture-phase delegation makes tab clicks work even if another script later
   // attaches a broken handler or a child element receives the click.
   document.addEventListener('click',function(ev){
@@ -308,7 +293,6 @@
     if(n===null) n=Array.prototype.indexOf.call(document.querySelectorAll('#tabStrip .tab'),btn);
     rawSwitchMainTab(Number(n));
   },true);
-
   window.hDTab = window.hDTab || function(n,btn){
     document.querySelectorAll('.hd-tab').forEach(function(x){x.classList.remove('active');});
     document.querySelectorAll('.hd-section').forEach(function(x){x.classList.remove('active');});
