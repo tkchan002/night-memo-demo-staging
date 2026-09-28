@@ -143,7 +143,7 @@ export async function saveWardReport({ wardId, date, editedPayload, existingRepo
     report_date: date,
     payload: { ...normalizeReportPayload(validation.payload), savedAt: new Date().toISOString() },
     bed_capacity_snapshot: capacity,
-    form_version: 2,
+    form_version: 1,
     report_item_snapshot: snapshotReportItems(items),
   };
   try {
