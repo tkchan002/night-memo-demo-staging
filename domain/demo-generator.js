@@ -293,13 +293,17 @@ function buildSessionPayload({ ward, capacity, items, rng, scenario, previousTot
   return normalizeReportPayload(payload);
 }
 
-function createReport({ ward, reportDate, submittedAt, payload, session, capacity }) {
+function createReport({ ward, reportDate, submittedAt, submittedMinutesAgo, payload, session, capacity }) {
   const normalized = normalizeReportPayload(payload);
   normalized.savedAt = submittedAt.toISOString();
   return {
     ward_code: String(ward.code),
     report_date: reportDate,
+    // submitted_at is used for preview only. During import the server recomputes
+    // submitted_at from submitted_minutes_ago so Manager and the importer share
+    // the same clock and timezone reference.
     submitted_at: submittedAt.toISOString(),
+    submitted_minutes_ago: Number(submittedMinutesAgo),
     payload: normalized,
     session,
     preview_capacity: Number(capacity) || 0,
@@ -352,6 +356,7 @@ export function generateDemoDataBundle({
       ward,
       reportDate,
       submittedAt: new Date(now.getTime() - previousAgeMinutes * 60000),
+      submittedMinutesAgo: previousAgeMinutes,
       payload: previousPayload,
       session: 'previous',
       capacity,
@@ -367,11 +372,14 @@ export function generateDemoDataBundle({
         previousTotal: Number(previousPayload.totalPatientM) || null,
         currentSession: true,
       });
-      const currentAgeMinutes = randomInt(rng, 6, 108);
+      // Demo-current submissions should always be comfortably inside the
+      // Manager 120-minute window. Keep them within the last 5–55 minutes.
+      const currentAgeMinutes = randomInt(rng, 5, 55);
       reports.push(createReport({
         ward,
         reportDate,
         submittedAt: new Date(now.getTime() - currentAgeMinutes * 60000),
+        submittedMinutesAgo: currentAgeMinutes,
         payload: currentPayload,
         session: 'current',
         capacity,
