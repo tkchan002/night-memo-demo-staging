@@ -1,4 +1,5 @@
 import { requireRole, signOut } from '../auth.js';
+import { CONFIG } from '../config.js';
 import {
   getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
@@ -28,12 +29,31 @@ const state = {
   demoPrepared: null,
 };
 
+const EMPTY_BED_GENDER_LABELS = Object.freeze({
+  male: 'Male',
+  female: 'Female',
+  dynamic: 'Mixed',
+  none: 'Not applicable',
+});
+
+function emptyBedGenderLabel(value) {
+  return EMPTY_BED_GENDER_LABELS[value] || value || 'Not applicable';
+}
+
+function installUiTerminology() {
+  // Keep the stored value `dynamic` for backward compatibility, but never
+  // expose that implementation term to Maintenance users.
+  const mixedOption = $('#mWardGender option[value="dynamic"]');
+  if (mixedOption) mixedOption.textContent = 'Mixed';
+}
+
 init().catch(error => { console.error(error); flash(error.message || String(error), 'error', 8000); });
 
 async function init() {
   state.access = await requireRole('maintenance');
   if (!state.access) return;
   setAppHeader({ title: 'Night Memo Maintenance', subtitle: 'Configuration and lifecycle console', access: state.access, mode: DB_MODE });
+  installUiTerminology();
   installGeneratedDemoUI();
   bind();
   // Only the visible Wards tab is on the initial critical path. Accounts,
@@ -138,7 +158,7 @@ function renderWardCards() {
   const periods = state.periods || [];
   $('#wardCards').innerHTML = state.wards.map(w => {
     const open = periods.some(p => p.ward_id === w.id && p.start_date <= today && (!p.end_date || p.end_date >= today));
-    return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(w.empty_bed_gender_mode)}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions"><button class="btn secondary small" data-edit-ward="${w.id}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${w.id}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${w.id}">Reopen</button>`}</div></div>`;
+    return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions"><button class="btn secondary small" data-edit-ward="${w.id}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${w.id}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${w.id}">Reopen</button>`}</div></div>`;
   }).join('');
   qsa('[data-edit-ward]').forEach(b => { b.onclick = () => openWardModal(state.wards.find(w => w.id === b.dataset.editWard)); });
   qsa('[data-close-ward]').forEach(b => { b.onclick = () => closeWard(b.dataset.closeWard); });
@@ -274,7 +294,13 @@ async function saveItem(event) {
 async function renderAudit() { const rows = await getAuditLog(200); $('#auditRows').innerHTML = rows.length ? rows.map(r => `<div class="audit-row"><b>${esc(formatDateTime(r.occurred_at))}</b> · <code>${esc(r.action)}</code> · ${esc(r.entity_type || '')} ${esc(r.entity_id || '')}<div class="muted">${esc(JSON.stringify(r.details || {}))}</div></div>`).join('') : '<div class="muted">No audit entries yet.</div>'; }
 
 
+function testToolsEnabled() {
+  const queryEnabled = new URLSearchParams(location.search).get('test-tools') === '1';
+  return DB_MODE === 'supabase' && (CONFIG.ENABLE_TEST_TOOLS === true || queryEnabled);
+}
+
 function installGeneratedDemoUI() {
+  if (!testToolsEnabled()) return;
   const tabs = document.querySelector('.maintenance-tabs');
   const body = document.querySelector('.legacy-panel-body');
   if (!tabs || !body || document.querySelector('[data-maint="demo"]')) return;
