@@ -14,4 +14,11 @@ export { getAuditLog, recordAudit } from './repositories/audit-repository.js';
 export { getManagerPrintTemplates, getActiveManagerPrintTemplate, saveManagerPrintTemplate, publishManagerPrintTemplate } from './repositories/template-repository.js';
 export { getWardNightSnapshot, getManagerNightSnapshot, getManagerRecentSnapshot, getMaintenanceWardsSnapshot } from './repositories/bootstrap-repository.js';
 export { importGeneratedDemoBatch, listGeneratedDemoBatches, deleteGeneratedDemoBatch } from './repositories/demo-data-repository.js';
-export { getManagerMemo, saveManagerMemo } from './repositories/manager-memo-repository.js';
+export {
+  getManagerMemo,
+  saveManagerMemo,
+  saveManagerMemoRecovery,
+  saveManagerMemoRevision,
+  listManagerMemoRevisions,
+  getManagerMemoRevision,
+} from './repositories/manager-memo-repository.js';
