@@ -1,5 +1,4 @@
 import { requireRole, signOut } from '../auth.js';
-import { CONFIG } from '../config.js';
 import {
   getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
@@ -294,13 +293,9 @@ async function saveItem(event) {
 async function renderAudit() { const rows = await getAuditLog(200); $('#auditRows').innerHTML = rows.length ? rows.map(r => `<div class="audit-row"><b>${esc(formatDateTime(r.occurred_at))}</b> · <code>${esc(r.action)}</code> · ${esc(r.entity_type || '')} ${esc(r.entity_id || '')}<div class="muted">${esc(JSON.stringify(r.details || {}))}</div></div>`).join('') : '<div class="muted">No audit entries yet.</div>'; }
 
 
-function testToolsEnabled() {
-  const queryEnabled = new URLSearchParams(location.search).get('test-tools') === '1';
-  return DB_MODE === 'supabase' && (CONFIG.ENABLE_TEST_TOOLS === true || queryEnabled);
-}
-
 function installGeneratedDemoUI() {
-  if (!testToolsEnabled()) return;
+  // Test Data is a permanent Maintenance feature. Access is still protected
+  // by requireRole('maintenance') and the server-side RPC authorization.
   const tabs = document.querySelector('.maintenance-tabs');
   const body = document.querySelector('.legacy-panel-body');
   if (!tabs || !body || document.querySelector('[data-maint="demo"]')) return;
