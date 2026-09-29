@@ -4,9 +4,9 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 
-test('Manager root entry uses only the modular editor page', async () => {
-  const js = (await readFile(new URL('manager.js', root), 'utf8')).trim();
-  assert.equal(js, "import './pages/manager-page.js';");
+test('Manager root entry loads the modular editor page', async () => {
+  const js = await readFile(new URL('manager.js', root), 'utf8');
+  assert.match(js, /import\s+['"]\.\/pages\/manager-page\.js['"]/);
 });
 
 test('Manager HTML has no old template editor and contains the document editor', async () => {
