@@ -13,53 +13,9 @@ const state = {
   refreshing: false,
 };
 
-installStyles();
-installPanel();
 bindControls();
 refreshNightOperations().catch(showError);
 setInterval(() => refreshNightOperations({ quiet: true }).catch(() => {}), 60_000);
-
-function installStyles() {
-  if (document.querySelector('link[data-night-operations-style]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = new URL('../css/manager-night-operations.css', import.meta.url).href;
-  link.dataset.nightOperationsStyle = '1';
-  document.head.append(link);
-}
-
-function installPanel() {
-  if ($('#nightOperationsPanel')) return;
-  const panel = document.createElement('section');
-  panel.id = 'nightOperationsPanel';
-  panel.className = 'night-operations-panel no-print';
-  panel.setAttribute('aria-labelledby', 'nightOperationsHeading');
-  panel.innerHTML = `
-    <div class="night-operations-head">
-      <div>
-        <h1 id="nightOperationsHeading">Night Operations</h1>
-        <div class="night-operations-date" id="nightOperationsDate">Reporting night: ${esc(state.reportingDate)}</div>
-      </div>
-      <div class="night-operations-actions"><button type="button" class="pill" id="refreshNightOperationsBtn">Refresh Staff</button></div>
-    </div>
-    <div class="night-operations-summary">
-      <div class="night-ops-stat"><strong id="nightNurseCount">—</strong> night nurses</div>
-      <div class="night-ops-stat"><strong id="nightRunnerCount">—</strong> night runners</div>
-      <div class="night-ops-stat"><strong id="nightRosterWardCount">—</strong> ward rosters available</div>
-    </div>
-    <section class="night-ops-section" aria-labelledby="nightNursesHeading">
-      <div class="night-ops-section-head"><h2 id="nightNursesHeading">Night Nurses</h2><button type="button" class="pill" id="printNightStaffBtn">Print</button></div>
-      <div id="nightWardRosterGrid" class="night-ward-grid"><div class="night-ops-loading">Loading night staff…</div></div>
-    </section>
-    <section class="night-ops-section" aria-labelledby="nightRunnersHeading">
-      <div class="night-ops-section-head"><h2 id="nightRunnersHeading">Night Runners</h2><button type="button" class="pill" id="printNightRunnerBtn">Print</button></div>
-      <div id="nightRunnerList"><div class="night-ops-loading">Loading Night Runners…</div></div>
-    </section>`;
-
-  const submission = document.querySelector('.submission-panel');
-  if (submission) submission.insertAdjacentElement('beforebegin', panel);
-  else document.querySelector('.manager-main')?.append(panel);
-}
 
 function bindControls() {
   $('#refreshNightOperationsBtn')?.addEventListener('click', () => refreshNightOperations());
@@ -74,6 +30,7 @@ async function refreshNightOperations({ quiet = false } = {}) {
   const button = $('#refreshNightOperationsBtn');
   if (button) button.disabled = true;
   if (!quiet) setLoading();
+
   try {
     const [wards, snapshots] = await Promise.all([
       getWardsForDate(state.reportingDate),
@@ -88,6 +45,10 @@ async function refreshNightOperations({ quiet = false } = {}) {
 }
 
 function setLoading() {
+  const wardSummary = $('#nightWardListSummary');
+  const runnerSummary = $('#nightRunnerListSummary');
+  if (wardSummary) wardSummary.textContent = 'Refreshing…';
+  if (runnerSummary) runnerSummary.textContent = 'Refreshing…';
   if ($('#nightWardRosterGrid')) $('#nightWardRosterGrid').innerHTML = '<div class="night-ops-loading">Refreshing night staff…</div>';
   if ($('#nightRunnerList')) $('#nightRunnerList').innerHTML = '<div class="night-ops-loading">Refreshing Night Runners…</div>';
 }
@@ -98,6 +59,8 @@ function render() {
   $('#nightRunnerCount').textContent = String(model.runnerCount);
   $('#nightRosterWardCount').textContent = `${model.wardsWithRoster} / ${model.wardCount}`;
   $('#nightOperationsDate').textContent = `Reporting night: ${displayReportingDate(state.reportingDate)}`;
+  $('#nightWardListSummary').textContent = `${model.wardsWithRoster} of ${model.wardCount} wards · ${model.nurseCount} nurses`;
+  $('#nightRunnerListSummary').textContent = `${model.runnerCount} runner${model.runnerCount === 1 ? '' : 's'}`;
   $('#printNightStaffBtn').disabled = model.wardCount === 0;
   $('#printNightRunnerBtn').disabled = false;
 
@@ -143,10 +106,13 @@ function showRosterPrint(html, title) {
   if (!modal || !frame || !heading) {
     const win = window.open('', '_blank');
     if (!win) return;
-    win.document.open(); win.document.write(html); win.document.close();
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
     win.addEventListener('load', () => win.print(), { once: true });
     return;
   }
+
   heading.textContent = title;
   modal.hidden = false;
   frame.onload = () => {
@@ -162,6 +128,8 @@ function showRosterPrint(html, title) {
 function showError(error) {
   console.error('Night Operations failed:', error);
   const message = esc(error?.message || error || 'Unable to load Night Operations.');
+  if ($('#nightWardListSummary')) $('#nightWardListSummary').textContent = 'Unavailable';
+  if ($('#nightRunnerListSummary')) $('#nightRunnerListSummary').textContent = 'Unavailable';
   if ($('#nightWardRosterGrid')) $('#nightWardRosterGrid').innerHTML = `<div class="night-ops-error">${message}</div>`;
   if ($('#nightRunnerList')) $('#nightRunnerList').innerHTML = `<div class="night-ops-error">${message}</div>`;
 }

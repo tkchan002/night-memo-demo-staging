@@ -1,2 +1,53 @@
-.night-operations-panel{background:#fff;border:2px solid #343a40;margin-bottom:12px}.night-operations-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:11px 12px;border-bottom:2px solid #343a40;background:#f0f1f2}.night-operations-head h1{font-size:1.08rem;margin:0 0 3px}.night-operations-date{font-size:.82rem;color:#4d535a}.night-operations-actions{display:flex;align-items:center;gap:8px}.night-operations-summary{display:flex;gap:0;border-bottom:2px solid #343a40;background:#fafafa}.night-ops-stat{flex:1;padding:8px 12px;border-right:1px solid #9ca3ad;font-size:.82rem}.night-ops-stat:last-child{border-right:0}.night-ops-stat strong{font-size:1.05rem;margin-right:4px}.night-ops-section{padding:12px}.night-ops-section+.night-ops-section{border-top:3px solid #343a40}.night-ops-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}.night-ops-section-head h2{font-size:1rem;margin:0}.night-ward-grid{display:grid;grid-template-columns:repeat(3,minmax(300px,1fr));gap:10px}.night-ward-card{border:3px solid #252a30;background:#fff;min-width:0}.night-ward-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 9px;border-bottom:3px solid #252a30;background:#e9ebed}.night-ward-code{font-size:1.02rem;font-weight:900;letter-spacing:.02em}.night-ward-count{font-size:.8rem;font-weight:800}.night-ward-table,.night-runner-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:.84rem}.night-ward-table th,.night-ward-table td,.night-runner-table th,.night-runner-table td{padding:6px 7px;border:1px solid #a3a8ae;text-align:left;vertical-align:top}.night-ward-table th,.night-runner-table th{background:#f4f4f4;font-weight:800}.night-ward-table th:first-child{width:21%}.night-ward-table th:last-child{width:31%}.night-roster-empty{padding:10px;color:#6a6f75;font-style:italic;background:#fafafa}.night-roster-updated{font-size:.72rem;color:#656b72;padding:4px 7px;border-top:1px solid #c9ccd0;background:#fafafa}.night-runner-table th:first-child{width:14%}.night-runner-table th:nth-child(2){width:16%}.night-runner-table th:last-child{width:26%}.night-ops-loading,.night-ops-error{padding:14px;border:1px solid #c7ccd2;background:#f7f7f7}.night-ops-error{background:#ffe9e7;border-color:#b76f69;color:#7a1d18}
-@media(max-width:1200px){.night-ward-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}}@media(max-width:760px){.night-ward-grid{grid-template-columns:1fr}.night-operations-head,.night-ops-section-head{align-items:flex-start;flex-direction:column}.night-operations-summary{flex-direction:column}.night-ops-stat{border-right:0;border-bottom:1px solid #9ca3ad}.night-ops-stat:last-child{border-bottom:0}}
+.night-operations-panel{
+  background:var(--legacy-panel-alt);
+  border:2px solid #a0a09a;
+  box-shadow:inset 1px 1px 0 var(--legacy-bevel-light),inset -1px -1px 0 var(--legacy-bevel-dark);
+  margin-bottom:12px;
+}
+.night-operations-head{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+  padding:8px 10px;
+  border-bottom:1px solid #a0a09a;
+  background:linear-gradient(to bottom,#e8e7e0,#d8d7d0);
+}
+.night-operations-head h1{font-size:1.05rem;margin:0 0 2px;color:#222}
+.night-operations-date{font-size:.78rem;color:var(--legacy-muted)}
+.night-operations-actions{display:flex;align-items:center;gap:8px}
+.night-operations-summary{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #b6b5ae;background:var(--legacy-workspace)}
+.night-ops-stat{display:flex;align-items:baseline;gap:6px;padding:7px 10px;border-right:1px solid #cbc9c0;font-size:.82rem;color:#444}
+.night-ops-stat:last-child{border-right:0}.night-ops-stat strong{font-size:1.05rem;color:#111}
+.night-ops-section{position:relative;padding:9px 10px}.night-ops-section+.night-ops-section{border-top:1px solid #b7b6ae}
+.night-ops-collapsible{padding-right:10px}
+.night-ops-print-btn{position:absolute;right:10px;top:7px;z-index:3;min-height:27px;padding:0 14px;font-size:12px}
+.night-ops-disclosure{border:1px solid #aaa99f;background:var(--legacy-workspace);box-shadow:inset 1px 1px 0 #fff}
+.night-ops-disclosure>summary{
+  min-height:42px;display:flex;align-items:center;gap:10px;cursor:pointer;list-style:none;
+  padding:8px 150px 8px 31px;position:relative;user-select:none;
+  background:linear-gradient(to bottom,#f7f6ef,#e7e5db);border-bottom:0;
+}
+.night-ops-disclosure>summary::-webkit-details-marker{display:none}
+.night-ops-disclosure>summary::before{content:'▶';position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:11px;color:#333}
+.night-ops-disclosure[open]>summary::before{content:'▼'}
+.night-ops-disclosure[open]>summary{border-bottom:1px solid #aaa99f}
+.night-ops-summary-title{font-weight:700;color:var(--legacy-blue);font-size:1rem}
+.night-ops-summary-meta{margin-left:auto;color:#555;font-size:.79rem;white-space:nowrap}
+.night-ops-disclosure-body{padding:10px;background:var(--legacy-workspace)}
+.night-ward-grid{display:grid;grid-template-columns:repeat(3,minmax(290px,1fr));gap:10px}
+.night-ward-card{border:3px solid #2e2e2e;background:#fff;min-width:0;box-shadow:1px 1px 0 #bcbcb4}
+.night-ward-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border-bottom:3px solid #2e2e2e;background:linear-gradient(to bottom,#fff,#d4d3d3)}
+.night-ward-code{font-size:1rem;font-weight:900;letter-spacing:.02em}.night-ward-count{font-size:.78rem;font-weight:800;color:#333}
+.night-ward-table,.night-runner-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:.82rem;background:#fff}
+.night-ward-table th,.night-ward-table td,.night-runner-table th,.night-runner-table td{padding:5px 7px;border:1px solid #b7b7b0;text-align:left;vertical-align:top}
+.night-ward-table th,.night-runner-table th{background:linear-gradient(to bottom,#fff,#dcdad2);font-weight:800}
+.night-ward-table th:first-child{width:21%}.night-ward-table th:last-child{width:31%}
+.night-roster-empty{padding:10px;color:#666;font-style:italic;background:#faf9f2}
+.night-roster-updated{font-size:.7rem;color:#666;padding:4px 7px;border-top:1px solid #c9c8c0;background:#f5f4ed}
+.night-runner-table th:first-child{width:14%}.night-runner-table th:nth-child(2){width:16%}.night-runner-table th:last-child{width:26%}
+.night-ops-loading,.night-ops-error{padding:12px;border:1px solid #c7c5ba;background:#f7f6ee}
+.night-ops-error{background:#ffe9e7;border-color:#b76f69;color:#7a1d18}
+@media(max-width:1200px){.night-ward-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}}
+@media(max-width:760px){
+  .night-ward-grid{grid-template-columns:1fr}.night-operations-head{align-items:flex-start;flex-direction:column}
+  .night-operations-summary{grid-template-columns:1fr}.night-ops-stat{border-right:0;border-bottom:1px solid #cbc9c0}.night-ops-stat:last-child{border-bottom:0}
+  .night-ops-print-btn{position:static;margin:0 0 7px}.night-ops-disclosure>summary{padding-right:31px;flex-wrap:wrap}.night-ops-summary-meta{width:100%;margin-left:0;padding-left:0}
+}

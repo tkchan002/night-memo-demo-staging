@@ -6,6 +6,7 @@
   <title>Patrol Night</title>
   <link rel="stylesheet" href="./css/legacy-shell.css">
   <link rel="stylesheet" href="./css/manager.css">
+  <link rel="stylesheet" href="./css/manager-night-operations.css">
 </head>
 <body class="legacy-page manager-page">
   <div class="legacy-shell manager-workspace">
@@ -22,6 +23,49 @@
 
     <main class="manager-main">
       <div id="managerStatus" class="manager-status no-print" hidden></div>
+
+      <section id="nightOperationsPanel" class="night-operations-panel no-print" aria-labelledby="nightOperationsHeading">
+        <div class="night-operations-head">
+          <div>
+            <h1 id="nightOperationsHeading">Night Operations</h1>
+            <div class="night-operations-date" id="nightOperationsDate">Reporting night: —</div>
+          </div>
+          <div class="night-operations-actions">
+            <button type="button" class="pill" id="refreshNightOperationsBtn">Refresh Staff</button>
+          </div>
+        </div>
+        <div class="night-operations-summary" aria-label="Night operations summary">
+          <div class="night-ops-stat"><strong id="nightNurseCount">—</strong><span>night nurses</span></div>
+          <div class="night-ops-stat"><strong id="nightRunnerCount">—</strong><span>night runners</span></div>
+          <div class="night-ops-stat"><strong id="nightRosterWardCount">—</strong><span>ward rosters available</span></div>
+        </div>
+
+        <section class="night-ops-section night-ops-collapsible" aria-labelledby="nightWardListHeading">
+          <button type="button" class="pill night-ops-print-btn" id="printNightStaffBtn">Print Ward List</button>
+          <details id="nightWardListDisclosure" class="night-ops-disclosure">
+            <summary>
+              <span id="nightWardListHeading" class="night-ops-summary-title">Ward List — Night Nurses</span>
+              <span id="nightWardListSummary" class="night-ops-summary-meta">Loading…</span>
+            </summary>
+            <div class="night-ops-disclosure-body">
+              <div id="nightWardRosterGrid" class="night-ward-grid"><div class="night-ops-loading">Loading night staff…</div></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="night-ops-section night-ops-collapsible" aria-labelledby="nightRunnerListHeading">
+          <button type="button" class="pill night-ops-print-btn" id="printNightRunnerBtn">Print Runner List</button>
+          <details id="nightRunnerListDisclosure" class="night-ops-disclosure">
+            <summary>
+              <span id="nightRunnerListHeading" class="night-ops-summary-title">Runner List — Night Runners</span>
+              <span id="nightRunnerListSummary" class="night-ops-summary-meta">Loading…</span>
+            </summary>
+            <div class="night-ops-disclosure-body">
+              <div id="nightRunnerList"><div class="night-ops-loading">Loading Night Runners…</div></div>
+            </div>
+          </details>
+        </section>
+      </section>
 
       <section class="submission-panel no-print" aria-labelledby="submissionHeading">
         <div class="submission-panel-head">
