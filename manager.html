@@ -73,8 +73,11 @@
           <div class="memo-title" id="memoTitle" contenteditable="true" data-rich="false">Night Memo</div>
 
           <div class="memo-header-grid">
-            <label>From <input id="memoFrom" type="text" autocomplete="off"></label>
-            <label>To <input id="memoTo" type="text" autocomplete="off"></label>
+            <label class="memo-header-fixed-prefix">
+              <span>From: N.O./APN,</span>
+              <input id="memoFromName" type="text" autocomplete="off" aria-label="From name and details">
+            </label>
+            <div class="memo-header-fixed-line"><strong>To:</strong> DOM/Medical (QEH)</div>
             <label>DECT Phone <input id="memoDectPhone" type="text" autocomplete="off"></label>
             <label>Date <input id="memoDateText" type="text" autocomplete="off"></label>
             <label>Call (Team) <input id="memoCallTeam" type="text" autocomplete="off"></label>

@@ -201,13 +201,15 @@ function additionalItemLines(bundle = [], items = []) {
 
 const linesToHtml = lines => lines.length ? lines.map(line => `<div>${esc(line)}</div>`).join('') : '<div><br></div>';
 
+export const MANAGER_MEMO_FROM_PREFIX = 'N.O./APN,';
+export const MANAGER_MEMO_TO = 'DOM/Medical (QEH)';
+
 export function buildManagerMemoDocument({ bundle = [], items = [], reportingDate = reportingNightDate() } = {}) {
   return {
-    version: 1,
+    version: 2,
     title: 'Night Memo',
     header: {
-      from: '',
-      to: '',
+      fromName: '',
       dectPhone: '',
       callTeam: '',
       date: toDisplayDate(reportingDate),

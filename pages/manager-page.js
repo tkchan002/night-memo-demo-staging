@@ -186,14 +186,19 @@ function renderSubmissionMonitor() {
   $$('.source-view-btn', body).forEach(button => { button.onclick = () => openSourceReport(button.dataset.wardId); });
 }
 
+function managerFromName(header = {}) {
+  if (header.fromName != null) return String(header.fromName);
+  const legacy = String(header.from || '').trim();
+  return legacy.replace(/^N\.?O\.?\/APN,?\s*/i, '').trim();
+}
+
 function renderEditor() {
   if (!state.memo) return;
   state.rendering = true;
   try {
     const doc = state.memo.document || {};
     $('#memoTitle').textContent = doc.title || 'Night Memo';
-    $('#memoFrom').value = doc.header?.from || '';
-    $('#memoTo').value = doc.header?.to || '';
+    $('#memoFromName').value = managerFromName(doc.header);
     $('#memoDectPhone').value = doc.header?.dectPhone || '';
     $('#memoDateText').value = doc.header?.date || '';
     $('#memoCallTeam').value = doc.header?.callTeam || '';
@@ -235,12 +240,10 @@ function serializeDocument() {
   const current = state.memo?.document || {};
   return {
     ...current,
-    version: 1,
+    version: 2,
     title: $('#memoTitle').textContent.trim() || 'Night Memo',
     header: {
-      ...(current.header || {}),
-      from: $('#memoFrom').value,
-      to: $('#memoTo').value,
+      fromName: $('#memoFromName').value,
       dectPhone: $('#memoDectPhone').value,
       date: $('#memoDateText').value,
       callTeam: $('#memoCallTeam').value,

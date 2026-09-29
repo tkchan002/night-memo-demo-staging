@@ -1,3 +1,6 @@
+const MANAGER_MEMO_FROM_PREFIX = 'N.O./APN,';
+const MANAGER_MEMO_TO = 'DOM/Medical (QEH)';
+
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[ch]));
@@ -29,8 +32,8 @@ export function renderManagerMemoPrintHtml(document = {}) {
 <article class="page">
   <div class="title">${esc(document.title || 'Night Memo')}</div>
   <div class="header">
-    <div><span class="label">From</span><span>: ${esc(header.from || '')}</span></div>
-    <div><span class="label">To</span><span>: ${esc(header.to || '')}</span></div>
+    <div><span class="label">From</span><span>: ${esc(MANAGER_MEMO_FROM_PREFIX)} ${esc(header.fromName || '')}</span></div>
+    <div><span class="label">To</span><span>: ${esc(MANAGER_MEMO_TO)}</span></div>
     <div><span class="label">DECT Phone</span><span>: ${esc(header.dectPhone || '')}</span></div>
     <div><span class="label">Date</span><span>: ${esc(header.date || '')}</span></div>
     <div><span class="label">Call (Team)</span><span>: ${esc(header.callTeam || '')}</span></div>
