@@ -16,11 +16,11 @@
     <div id="gdTitleBar"><span id="gdTitleText">Data Summary</span><button id="gdCloseBtn" onclick="gdClose()" title="Close">&#x2715;</button></div>
     <div class="gd-section-hdr" id="gdSectionHdr"></div>
     <div id="gdBody">
-      <div id="gdNoHistory">No saved history found.<br>Use the <b>Save</b> button first to record data.</div>
-      <table id="gdTable"><thead><tr><th>Form Label</th><th>Value from last saved entry</th></tr></thead><tbody id="gdTbody"></tbody></table>
+      <div id="gdNoHistory">No previous submitted memo found.<br>Use <b>Submit</b> to create a memo that can be reused with Get Data.</div>
+      <table id="gdTable"><thead><tr><th>Form Label</th><th>Value from last submitted memo</th></tr></thead><tbody id="gdTbody"></tbody></table>
     </div>
     <div id="gdFooter">
-      <div id="gdFooterMsg">The above data will be retrieved from the most recent saved entry and applied to this tab.</div>
+      <div id="gdFooterMsg">The above data will be retrieved from the most recent submitted memo and applied to this tab.</div>
       <button class="gd-btn confirm" id="gdConfirmBtn" onclick="gdConfirm()">Confirm</button>
       <button class="gd-btn" onclick="gdClose()">Cancel</button>
     </div>
@@ -95,7 +95,6 @@
           <div class="fr"><span class="fl">Inf +ve:</span><span class="fc" id="i_Inf"></span></div>
           <div class="fr"><span class="fl">Candida Auris Other Contact:</span><span class="fc" id="i_CA"></span></div>
           <div id="customInfRows"></div>
-          <button class="btn-s" onclick="maintenanceManagedNotice()">+ Add Infection</button>
           <hr class="sep">
           <div class="sec-title" style="font-size:1.15rem;margin-top:8px">MV / NIV / HFNC / HD / CAPD</div>
           <div class="fr"><span class="fl">MV:</span><span class="fc" id="d_MV"></span></div>
@@ -104,7 +103,6 @@
           <div class="fr"><span class="fl">HD:</span><span class="fc" id="d_HD"></span></div>
           <div class="fr"><span class="fl">CAPD:</span><span class="fc" id="d_CAPD"></span></div>
           <div id="customDevRows"></div>
-          <button class="btn-s" onclick="maintenanceManagedNotice()">+ Add Device</button>
           <div id="dynamicAdditionalWrap" class="hidden"><hr class="sep"><div class="sec-title" style="font-size:1.15rem;margin-top:8px">Additional Report Items</div><div id="dynamicAdditionalRows"></div></div>
         </div>
         <!-- Tab 3 -->
@@ -279,7 +277,6 @@
     if(staffBar) staffBar.classList.remove('show');
     buttons.forEach(function(b,i){b.classList.toggle('active',i===n);});
     panels.forEach(function(panel,i){panel.classList.toggle('active',i===n);});
-
     // Let ward.js synchronize its private mode flags when it is available.
     document.dispatchEvent(new CustomEvent('ward-main-tab-selected',{detail:{index:n}}));
   }

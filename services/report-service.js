@@ -2,12 +2,16 @@ import * as db from '../data/index.js';
 import { todayISO } from '../core/dates.js';
 import { effectiveItems, mergePayloadPreservingUnknown, normalizeReportPayload, snapshotReportItems } from '../domain/report-model.js';
 import { validateReportPayload } from '../domain/report-validation.js';
-import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
+import { SUBMISSION_WINDOW_MINUTES, isRecentSubmission } from '../domain/report-session.js';
 
 function itemsForReport(allItems, date, report, includeInactiveHistorical = false) {
   return report?.report_item_snapshot?.length
     ? report.report_item_snapshot.map(i => ({ ...i, __historical: true }))
     : effectiveItems(allItems || [], date, { includeInactiveHistorical });
+}
+
+function currentWardSubmission(report, now = new Date()) {
+  return isRecentSubmission(report, now, SUBMISSION_WINDOW_MINUTES) ? report : null;
 }
 
 export async function loadWardReportContext(wardId, date) {
@@ -17,7 +21,8 @@ export async function loadWardReportContext(wardId, date) {
   ]);
   if (snapshot) {
     const allItems = snapshot.items || [];
-    const report = snapshot.report || null;
+    const latestReport = snapshot.report || null;
+    const report = currentWardSubmission(latestReport);
     const sourceRecord = draft || report;
     const items = itemsForReport(allItems, date, sourceRecord, false);
     return {
@@ -30,13 +35,14 @@ export async function loadWardReportContext(wardId, date) {
       draft,
     };
   }
-  const [operational, capacity, allItems, staff, report] = await Promise.all([
+  const [operational, capacity, allItems, staff, latestReport] = await Promise.all([
     db.isWardOperational(wardId, date),
     db.getWardCapacity(wardId, date),
     db.getReportItems(date, true),
     db.getWardStaff(wardId, false),
     db.getWardReport(wardId, date),
   ]);
+  const report = currentWardSubmission(latestReport);
   const sourceRecord = draft || report;
   const items = itemsForReport(allItems, date, sourceRecord, false);
   return { operational, capacity: Number(capacity) || 0, items, allItems, staff: staff || [], report, draft };
@@ -75,7 +81,6 @@ export async function loadManagerCurrent(windowMinutes = SUBMISSION_WINDOW_MINUT
       })),
     };
   }
-
   const [allItems, allWards, reports] = await Promise.all([
     db.getReportItems(date, true),
     db.getWardsForDate(date),
@@ -194,4 +199,3 @@ export const saveWardReport = submitWardReport;
 export async function loadWardSubmissionStatus(wardId, windowMinutes = SUBMISSION_WINDOW_MINUTES) {
   return db.getWardSubmissionStatus(wardId, windowMinutes);
 }
-

@@ -83,24 +83,22 @@ export async function getRecentReports(wardId, limit = 30) {
   return result.data || [];
 }
 
-export async function getPreviousReport(wardId, beforeDate) {
+export async function getPreviousReport(wardId, beforeDate, excludeReportId = null) {
+  const limit = excludeReportId ? 2 : 1;
   if (DB_MODE === 'demo') {
-    const rows = demoRead().ward_reports
-      .filter(r => r.ward_id === wardId && r.report_date <= beforeDate)
-      .sort(newestFirst)
-      .slice(0, 2);
-    return rows[1] || null;
+    return demoRead().ward_reports
+      .filter(r => r.ward_id === wardId && r.report_date <= beforeDate && (!excludeReportId || r.id !== excludeReportId))
+      .sort(newestFirst)[0] || null;
   }
-  let result = await supabase.from('ward_reports').select('*').eq('ward_id', wardId).lte('report_date', beforeDate).order('submitted_at', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(2);
-  if (result.error && isMissingSubmittedAt(result.error)) result = await supabase.from('ward_reports').select('*').eq('ward_id', wardId).lte('report_date', beforeDate).order('updated_at', { ascending: false }).limit(2);
+  let result = await supabase.from('ward_reports').select('*').eq('ward_id', wardId).lte('report_date', beforeDate).order('submitted_at', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false }).limit(limit);
+  if (result.error && isMissingSubmittedAt(result.error)) result = await supabase.from('ward_reports').select('*').eq('ward_id', wardId).lte('report_date', beforeDate).order('updated_at', { ascending: false }).limit(limit);
   if (result.error) throw result.error;
-  return (result.data || [])[1] || null;
+  return (result.data || []).find(r => !excludeReportId || r.id !== excludeReportId) || null;
 }
 
 export async function saveWardReportSession(row, windowMinutes = SUBMISSION_WINDOW_MINUTES) {
   const now = new Date();
   const nowISO = now.toISOString();
-
   if (DB_MODE === 'demo') {
     const state = demoRead();
     const current = state.ward_reports
@@ -120,13 +118,11 @@ export async function saveWardReportSession(row, windowMinutes = SUBMISSION_WIND
     demoWrite(state);
     return out;
   }
-
   const { data, error } = await supabase.rpc('save_ward_report_session', {
     p_row: row,
     p_window_minutes: Math.max(1, Number(windowMinutes) || SUBMISSION_WINDOW_MINUTES),
   });
   if (!error) return data;
-
   // Incremental-deployment fallback: until the session migration is installed,
   // retain the old one-report-per-date behavior instead of breaking saves.
   const text = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;
@@ -144,6 +140,7 @@ export async function saveWardReportSession(row, windowMinutes = SUBMISSION_WIND
 
 // Compatibility export for older callers.
 export const upsertWardReport = saveWardReportSession;
+
 export async function getWardReportDraft(wardId, date = defaultReportDate()) {
   if (DB_MODE === 'demo') {
     const state = demoRead();
@@ -218,7 +215,6 @@ export async function getWardSubmissionStatus(wardId, windowMinutes = SUBMISSION
   });
   if (!error) return data || { last_submitted_at: null, submitted_in_window: false };
   if (!isMissingRpc(error, 'get_ward_submission_status')) throw error;
-
   const fallback = await supabase
     .from('ward_reports')
     .select('id,report_date,submitted_at,updated_at')
@@ -236,4 +232,3 @@ export async function getWardSubmissionStatus(wardId, windowMinutes = SUBMISSION
     submitted_in_window: latest ? isRecentSubmission(latest, new Date(), minutes) : false,
   };
 }
-
