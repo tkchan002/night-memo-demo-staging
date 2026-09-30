@@ -1,13 +1,41 @@
 import { DB_MODE, supabase } from '../client.js';
 import { demoRead, demoWrite, uid } from '../demo-state.js';
 
+function sortStaff(rows) {
+  return [...rows].sort((a, b) => (a.display_order || 0) - (b.display_order || 0) || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
 export async function getWardStaff(wardId, includeInactive = false) {
-  if (DB_MODE === 'demo') return demoRead().ward_staff.filter(s => s.ward_id === wardId && (includeInactive || s.active)).sort((a, b) => (a.display_order || 0) - (b.display_order || 0) || a.name.localeCompare(b.name));
+  if (DB_MODE === 'demo') return sortStaff(demoRead().ward_staff.filter(s => s.ward_id === wardId && (includeInactive || s.active)));
   let query = supabase.from('ward_staff').select('*').eq('ward_id', wardId).order('display_order').order('name');
   if (!includeInactive) query = query.eq('active', true);
   const { data, error } = await query;
   if (error) throw error;
   return data || [];
+}
+
+export async function getWardStaffForWards(wardIds, includeInactive = false) {
+  const ids = [...new Set((wardIds || []).filter(Boolean))];
+  const grouped = Object.fromEntries(ids.map(id => [id, []]));
+  if (!ids.length) return grouped;
+
+  if (DB_MODE === 'demo') {
+    for (const row of demoRead().ward_staff) {
+      if (!grouped[row.ward_id] || (!includeInactive && !row.active)) continue;
+      grouped[row.ward_id].push(row);
+    }
+  } else {
+    let query = supabase.from('ward_staff').select('*').in('ward_id', ids).order('display_order').order('name');
+    if (!includeInactive) query = query.eq('active', true);
+    const { data, error } = await query;
+    if (error) throw error;
+    for (const row of data || []) {
+      if (grouped[row.ward_id]) grouped[row.ward_id].push(row);
+    }
+  }
+
+  for (const wardId of ids) grouped[wardId] = sortStaff(grouped[wardId]);
+  return grouped;
 }
 
 export async function saveWardStaff(staff) {

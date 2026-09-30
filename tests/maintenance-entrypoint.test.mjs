@@ -13,11 +13,14 @@ test('maintenance root entry point delegates to the modular page controller', as
   assert.equal(text, "import './pages/maintenance-page.js';");
 });
 
-test('Test Data is permanent and has no query/config visibility gate', async () => {
-  const text = await source('pages/maintenance-page.js');
-  assert.match(text, /installGeneratedDemoUI\(\)/);
-  assert.match(text, /tab\.textContent = 'Test Data'/);
-  assert.doesNotMatch(text, /testToolsEnabled/);
-  assert.doesNotMatch(text, /ENABLE_TEST_TOOLS/);
-  assert.doesNotMatch(text, /test-tools/);
+test('Test Data is permanent source markup and has no query/config visibility gate', async () => {
+  const html = await source('maintenance.html');
+  const page = await source('pages/maintenance-page.js');
+  assert.match(html, /data-maint="demo"[^>]*>Test Data</);
+  assert.match(html, /data-maint-page="demo"/);
+  assert.match(page, /from '\.\/maintenance-test-data\.js'/);
+  assert.match(page, /initMaintenanceTestData\(\)/);
+  assert.doesNotMatch(page, /installGeneratedDemoUI/);
+  assert.doesNotMatch(page, /tab\.textContent\s*=\s*['"]Test Data/);
+  assert.doesNotMatch(page, /testToolsEnabled|ENABLE_TEST_TOOLS|test-tools/);
 });
