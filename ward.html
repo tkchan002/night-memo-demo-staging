@@ -39,12 +39,12 @@
       <strong>Current memo cycle:</strong><span>Checking submission status...</span>
     </div>
     <div class="tab-strip" id="tabStrip">
-      <button type="button" class="tab active" data-main-tab="0" onclick="sT(0)">Header</button>
-      <button type="button" class="tab" data-main-tab="1" onclick="sT(1)">Admission / Bed Count</button>
-      <button type="button" class="tab" data-main-tab="2" onclick="sT(2)">Infection / Devices</button>
-      <button type="button" class="tab" data-main-tab="3" onclick="sT(3)">Patient List</button>
-      <button type="button" class="tab" data-main-tab="4" onclick="sT(4)">Consultation / Intubation</button>
-      <button type="button" class="tab" data-main-tab="5" onclick="sT(5)">Night Nurse</button>
+      <button type="button" class="tab active" data-main-tab="0">Header</button>
+      <button type="button" class="tab" data-main-tab="1">Admission / Bed Count</button>
+      <button type="button" class="tab" data-main-tab="2">Infection / Devices</button>
+      <button type="button" class="tab" data-main-tab="3">Patient List</button>
+      <button type="button" class="tab" data-main-tab="4">Consultation / Intubation</button>
+      <button type="button" class="tab" data-main-tab="5">Night Nurse</button>
     </div>
     <div class="main-panel">
       <div id="formWrap">
@@ -165,11 +165,11 @@
       <div id="histDetailWrap">
         <div id="histViewBanner" style="background:#3273C6;color:#fff;padding:7px 16px;font-size:0.95rem;font-weight:700;display:flex;align-items:center;gap:12px;"><span id="histViewLabel">Viewing: --</span><span id="histViewSavedAt" style="font-weight:400;font-size:0.85rem;opacity:0.85;"></span></div>
         <div class="hd-tab-strip">
-          <button class="hd-tab active" onclick="hDTab(0,this)">Admission / Bed</button>
-          <button class="hd-tab" onclick="hDTab(1,this)">Infection / Devices</button>
-          <button class="hd-tab" onclick="hDTab(2,this)">Patient List</button>
-          <button class="hd-tab" onclick="hDTab(3,this)">Consultation / Intubation</button>
-          <button class="hd-tab" onclick="hDTab(4,this)">Night Nurse</button>
+          <button type="button" class="hd-tab active" data-history-tab="0">Admission / Bed</button>
+          <button type="button" class="hd-tab" data-history-tab="1">Infection / Devices</button>
+          <button type="button" class="hd-tab" data-history-tab="2">Patient List</button>
+          <button type="button" class="hd-tab" data-history-tab="3">Consultation / Intubation</button>
+          <button type="button" class="hd-tab" data-history-tab="4">Night Nurse</button>
         </div>
         <div id="hd0" class="hd-section active"></div><div id="hd1" class="hd-section"></div><div id="hd2" class="hd-section"></div><div id="hd3" class="hd-section"></div><div id="hd4" class="hd-section"></div>
       </div>
@@ -185,8 +185,8 @@
         <button class="pill" onclick="location.reload()">Reset</button>
         <button class="pill" id="logoutBtn">Logout</button>
       </div>
-      <div id="histBar"><button class="pill" id="hbReprint" disabled onclick="histReprint()">Reprint</button><button class="pill" id="hbDelete" disabled onclick="histDeleteCurrent()">Delete</button><button class="pill" onclick="toggleHistory()">Cancel</button></div>
-      <div id="staffBar"><button class="pill" onclick="toggleStaffList()">Close</button></div>
+      <div id="histBar"><button class="pill" id="hbReprint" disabled onclick="histReprint()">Reprint</button><button class="pill" id="hbDelete" disabled onclick="histDeleteCurrent()">Delete</button><button class="pill" id="historyCancelBtn" onclick="toggleHistory()">Cancel</button></div>
+      <div id="staffBar"><button class="pill" id="staffCloseBtn" onclick="toggleStaffList()">Close</button></div>
     </div>
     <!-- Original Night Memo print preview / font controls, now backed by Supabase report data. -->
     <div id="pdfSettingsModal">
@@ -248,56 +248,7 @@
     </div>
   </div><!-- /.app -->
 </div>
-<script>
-// Main-tab controller is intentionally plain JavaScript (not an ES module).
-// It remains available even if authentication/database/print modules fail to load.
-(function(){
-  function rawSwitchMainTab(n){
-    n=Number(n);
-    var buttons=document.querySelectorAll('#tabStrip .tab');
-    var panels=document.querySelectorAll('#formWrap .tp');
-    if(!Number.isInteger(n) || n<0 || n>=buttons.length || n>=panels.length) return;
-    // Always restore the ordinary form when a main tab is chosen.  This prevents
-    // History/Staff mode from leaving the tab rail permanently disabled.
-    var form=document.getElementById('formWrap');
-    var hist=document.getElementById('histDetailWrap');
-    var idle=document.getElementById('histIdle');
-    var staff=document.getElementById('staffListWrap');
-    var strip=document.getElementById('tabStrip');
-    var normal=document.getElementById('normalBar');
-    var histBar=document.getElementById('histBar');
-    var staffBar=document.getElementById('staffBar');
-    if(form) form.classList.remove('hidden');
-    if(hist) hist.classList.remove('open');
-    if(idle) idle.classList.remove('show');
-    if(staff) staff.classList.remove('open');
-    if(strip) strip.classList.remove('disabled-strip');
-    if(normal) normal.style.display='flex';
-    if(histBar) histBar.classList.remove('show');
-    if(staffBar) staffBar.classList.remove('show');
-    buttons.forEach(function(b,i){b.classList.toggle('active',i===n);});
-    panels.forEach(function(panel,i){panel.classList.toggle('active',i===n);});
-    // Let ward.js synchronize its private mode flags when it is available.
-    document.dispatchEvent(new CustomEvent('ward-main-tab-selected',{detail:{index:n}}));
-  }
-  window.sT=rawSwitchMainTab;
-  // Capture-phase delegation makes tab clicks work even if another script later
-  // attaches a broken handler or a child element receives the click.
-  document.addEventListener('click',function(ev){
-    var btn=ev.target.closest && ev.target.closest('#tabStrip .tab');
-    if(!btn) return;
-    var n=btn.getAttribute('data-main-tab');
-    if(n===null) n=Array.prototype.indexOf.call(document.querySelectorAll('#tabStrip .tab'),btn);
-    rawSwitchMainTab(Number(n));
-  },true);
-  window.hDTab = window.hDTab || function(n,btn){
-    document.querySelectorAll('.hd-tab').forEach(function(x){x.classList.remove('active');});
-    document.querySelectorAll('.hd-section').forEach(function(x){x.classList.remove('active');});
-    if(btn) btn.classList.add('active');
-    var el=document.getElementById('hd'+n); if(el) el.classList.add('active');
-  };
-})();
-</script>
+
 <script type="module" src="./ward.js"></script>
 </body>
 </html>

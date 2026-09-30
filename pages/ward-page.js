@@ -7,6 +7,7 @@ import {
 import { qs, qsa, esc } from '../core/dom.js';
 import { todayISO, toDisplayDate, fromDisplayDate, formatDateTime } from '../core/dates.js';
 import { createRequestSequencer } from '../core/request-sequencer.js';
+import { initWardTabs } from '../components/ward-tabs.js';
 import {
   DIRECT_REPORT_KEYS, fullReportPayloadDefaults, normalizeReportPayload,
   normalizeDevice, formatDevice, formatDynamic,
@@ -18,6 +19,7 @@ import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
 const $ = qs;
 const $$ = qsa;
 const loadRequests = createRequestSequencer();
+const wardTabs = initWardTabs();
 const INF_MAP = { iCRE: 'i_CRE', iVRE: 'i_VRE', iCOV: 'i_COVID', iMDR: 'i_MDRA', iCD: 'i_CD', iInf: 'i_Inf', iCA: 'i_CA' };
 const DEV_MAP = { dMV: 'd_MV', dNIV: 'd_NIV', dHF: 'd_HFNC', dHD: 'd_HD', dCA: 'd_CAPD' };
 const FALLBACK_WARD_PRINT_SETTINGS = Object.freeze({ topTitle: 19, topContent: 13, boxTitle: 15, boxContent: 12, lineHeader: 9, lineContent: 11, consHeader: 10, consContent: 10, intubHeader: 9, intubContent: 10, nurseTitle: 9, nurseContent: 11, sigContent: 11, infLabel: 12, infValue: 12, devLabel: 12, devValue: 12 });
@@ -458,7 +460,7 @@ async function openHistory(report) {
   $('#staffListWrap').classList.remove('open');
   $('#histIdle').classList.remove('show');
   $('#histDetailWrap').classList.add('open');
-  $('#tabStrip').classList.add('disabled-strip');
+  wardTabs.setMainLocked(true);
   $('#normalBar').style.display = 'none';
   $('#staffBar').classList.remove('show');
   $('#histBar').classList.add('show');
@@ -506,9 +508,56 @@ function renderHistorySections(report, items, capacity) {
 
 function roFr(label, value) { const v = Array.isArray(value) ? (value.length ? value.map(x => `<span class="ro-bch">${esc(x)}</span>`).join('') : 'Nil') : esc(value ?? ''); return `<div class="ro-fr"><span class="ro-fl">${esc(label)}</span><span class="ro-fc">${v || '—'}</span></div>`; }
 function roTable(headers, rows) { return `<table class="ro-tbl"><thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${(rows || []).map(row => `<tr>${headers.map((_, i) => `<td>${esc(row[i] || '')}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${headers.length}">No entries</td></tr>`}</tbody></table>`; }
-function setFormMode() { state.historyMode = false; state.staffMode = false; $('#histSidebar').classList.remove('open'); $('#histDetailWrap').classList.remove('open'); $('#histIdle').classList.remove('show'); $('#staffListWrap').classList.remove('open'); $('#formWrap').classList.remove('hidden'); $('#tabStrip').classList.remove('disabled-strip'); $('#histBar').classList.remove('show'); $('#staffBar').classList.remove('show'); $('#normalBar').style.display = 'flex'; }
-async function toggleHistory() { if (state.historyMode) return setFormMode(); state.historyMode = true; state.staffMode = false; $('#histSidebar').classList.add('open'); $('#formWrap').classList.add('hidden'); $('#staffListWrap').classList.remove('open'); $('#histDetailWrap').classList.remove('open'); $('#histIdle').classList.add('show'); $('#tabStrip').classList.add('disabled-strip'); $('#normalBar').style.display = 'none'; $('#staffBar').classList.remove('show'); $('#histBar').classList.add('show'); $('#hbReprint').disabled = true; $('#hbDelete').disabled = true; await refreshHistory(); }
-async function toggleStaffList() { if (state.staffMode) return setFormMode(); state.staffMode = true; state.historyMode = false; $('#histSidebar').classList.remove('open'); $('#formWrap').classList.add('hidden'); $('#histDetailWrap').classList.remove('open'); $('#histIdle').classList.remove('show'); $('#staffListWrap').classList.add('open'); $('#tabStrip').classList.add('disabled-strip'); $('#normalBar').style.display = 'none'; $('#histBar').classList.remove('show'); $('#staffBar').classList.add('show'); await renderStaffList(); }
+function setFormMode() {
+  state.historyMode = false;
+  state.staffMode = false;
+  $('#histSidebar').classList.remove('open');
+  $('#histDetailWrap').classList.remove('open');
+  $('#histIdle').classList.remove('show');
+  $('#staffListWrap').classList.remove('open');
+  $('#formWrap').classList.remove('hidden');
+  wardTabs.setMainLocked(false);
+  $('#histBar').classList.remove('show');
+  $('#staffBar').classList.remove('show');
+  $('#normalBar').style.display = 'flex';
+  wardTabs.focusActiveMain();
+}
+
+async function toggleHistory() {
+  if (state.historyMode) return setFormMode();
+  state.historyMode = true;
+  state.staffMode = false;
+  $('#histSidebar').classList.add('open');
+  $('#formWrap').classList.add('hidden');
+  $('#staffListWrap').classList.remove('open');
+  $('#histDetailWrap').classList.remove('open');
+  $('#histIdle').classList.add('show');
+  wardTabs.setMainLocked(true);
+  $('#normalBar').style.display = 'none';
+  $('#staffBar').classList.remove('show');
+  $('#histBar').classList.add('show');
+  $('#hbReprint').disabled = true;
+  $('#hbDelete').disabled = true;
+  $('#historyCancelBtn')?.focus();
+  await refreshHistory();
+}
+
+async function toggleStaffList() {
+  if (state.staffMode) return setFormMode();
+  state.staffMode = true;
+  state.historyMode = false;
+  $('#histSidebar').classList.remove('open');
+  $('#formWrap').classList.add('hidden');
+  $('#histDetailWrap').classList.remove('open');
+  $('#histIdle').classList.remove('show');
+  $('#staffListWrap').classList.add('open');
+  wardTabs.setMainLocked(true);
+  $('#normalBar').style.display = 'none';
+  $('#histBar').classList.remove('show');
+  $('#staffBar').classList.add('show');
+  $('#staffCloseBtn')?.focus();
+  await renderStaffList();
+}
 async function renderStaffList() { state.staff = await getWardStaff(state.ward.id, false); const body = $('#staffListBody'); body.innerHTML = ''; state.staff.forEach(appendStaffRow); renderStaffDataLists(); }
 function appendStaffRow(staff = { role: 'RN', name: '', appointment_date: '', active: true }) { const row = document.createElement('tr'); row.dataset.id = staff.id || ''; row.innerHTML = `<td><select class="staffRole"><option>RN</option><option>EN</option><option>APN</option><option>Student Nurse</option></select></td><td><input class="staffName" value="${esc(staff.name || '')}"></td><td><input class="staffAppt" placeholder="dd/mm/yyyy" value="${esc(formatAppt(staff.appointment_date))}"></td><td><button class="btn-x" type="button">x</button></td>`; $('.staffRole', row).value = staff.role || 'RN'; ['.staffRole', '.staffName', '.staffAppt'].forEach(sel => $(sel, row).addEventListener('change', () => saveStaffRow(row))); $('.btn-x', row).onclick = async () => { if (!row.dataset.id) return row.remove(); await setStaffActive(row.dataset.id, false); showStatus('success', 'Staff record deactivated.'); await renderStaffList(); }; $('#staffListBody').append(row); }
 function addStaffRow() { appendStaffRow(); }
@@ -587,7 +636,6 @@ function gdConfirm() {
   gdClose();
 }
 
-function hDTab(n, btn) { $$('.hd-tab').forEach(x => x.classList.remove('active')); $$('.hd-section').forEach(x => x.classList.remove('active')); btn?.classList.add('active'); $(`#hd${n}`)?.classList.add('active'); }
 function histDeleteCurrent() { showStatus('error', 'Historical report deletion is disabled in the Supabase version.'); }
 async function histReprint() { if (state.currentHist) await printReportObject(state.currentHist); }
 function printContext(report, items, capacity) { return { ward: state.ward, report, capacity, items, settings: pdfSettings, logoUrl: new URL('../assets/heart-logo.png', import.meta.url).href }; }
@@ -607,4 +655,4 @@ async function resetPdfSettings() { if (!confirm('Reset all font sizes to the or
 function printPdf() { const frame = $('#pdfPreviewFrame'); frame.contentWindow?.focus(); frame.contentWindow?.print(); }
 async function applyPdfSettings() { const mod = await getPrintModule(); pdfSettings = mod.saveWardPrintSettings(readPrintControls()); showStatus('loading', 'Choose “Save as PDF” in the print dialog.'); printPdf(); }
 
-Object.assign(window, { hDTab, calcEmpty, addEmptyDetail, addEB, addPt, addCs, addIt, addNR, toggleNil, toggleNilConsult, toggleNilIntub, saveEntry, submitEntry, handleGen, openPdfSettings, closePdfSettings, printPdf, applyPdfSettings, updatePdfPreviewDebounced, resetPdfSettings, toggleHistory, toggleStaffList, addStaffRow, getDataForTab, gdClose, gdConfirm, histReprint, histDeleteCurrent });
+Object.assign(window, { calcEmpty, addEmptyDetail, addEB, addPt, addCs, addIt, addNR, toggleNil, toggleNilConsult, toggleNilIntub, saveEntry, submitEntry, handleGen, openPdfSettings, closePdfSettings, printPdf, applyPdfSettings, updatePdfPreviewDebounced, resetPdfSettings, toggleHistory, toggleStaffList, addStaffRow, getDataForTab, gdClose, gdConfirm, histReprint, histDeleteCurrent });
