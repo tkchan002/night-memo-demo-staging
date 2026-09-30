@@ -35,8 +35,23 @@
         <section class="maint-page active" data-maint-page="wards">
           <div class="right-actions"><button class="btn" id="addWardBtn">+ Add Ward</button></div>
           <div class="section-title">Ward Configuration &amp; Lifecycle</div>
-          <p class="muted">Use Up / Down on each ward card to control the ward display sequence. Ordering is managed here rather than inside Edit Ward.</p>
-          <div class="ward-cards" id="wardCards"></div>
+          <p class="muted">Wards are shown in their actual display sequence from top to bottom. Use Up / Down to change the sequence; ordering is managed here rather than inside Edit Ward.</p>
+          <div class="table-scroll ward-list-scroll">
+            <table class="data-table ward-list-table">
+              <thead>
+                <tr>
+                  <th>Ward</th>
+                  <th>Display Name / Contact</th>
+                  <th>Status</th>
+                  <th>Empty-bed Gender</th>
+                  <th>Memo Section</th>
+                  <th>Move</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="wardRows"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="maint-page" data-maint-page="capacity">

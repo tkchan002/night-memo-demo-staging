@@ -100,7 +100,7 @@ function closeModal(sel) { $(sel).classList.remove('show'); }
 async function ensureWardsLoaded(force = false) {
   if (state.loaded.wards && !force) return;
   if (state.loading.wards) return state.loading.wards;
-  $('#wardCards').innerHTML = '<div class="muted">Loading wards...</div>';
+  $('#wardRows').innerHTML = '<tr><td colspan="7" class="muted">Loading wards...</td></tr>';
   state.loading.wards = (async () => {
     const snapshot = await getMaintenanceWardsSnapshot();
     if (snapshot) {
@@ -111,7 +111,7 @@ async function ensureWardsLoaded(force = false) {
     }
     state.loaded.wards = true;
     fillWardSelects();
-    renderWardCards();
+    renderWardList();
   })();
   try { await state.loading.wards; } finally { state.loading.wards = null; }
 }
@@ -150,15 +150,40 @@ function fillWardSelects() {
   if (!$('#staffWard').value && state.wards[0]) $('#staffWard').value = state.wards[0].id;
 }
 
-function renderWardCards() {
+function renderWardList() {
   const today = todayISO();
   const periods = state.periods || [];
   const orderedWards = sortByOrder(state.wards, 'display_order');
   state.wards = orderedWards;
-  $('#wardCards').innerHTML = orderedWards.map((w, index) => {
+
+  const host = $('#wardRows');
+  if (!orderedWards.length) {
+    host.innerHTML = '<tr><td colspan="7" class="muted">No wards configured.</td></tr>';
+    return;
+  }
+
+  host.innerHTML = orderedWards.map((w, index) => {
     const open = periods.some(p => p.ward_id === w.id && p.start_date <= today && (!p.end_date || p.end_date >= today));
-    return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions ward-card-actions"><button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move ward up">↑ Up</button><button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="1" ${index === orderedWards.length - 1 ? 'disabled' : ''} title="Move ward down">↓ Down</button><button class="btn secondary small" data-edit-ward="${esc(w.id)}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${esc(w.id)}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${esc(w.id)}">Reopen</button>`}</div></div>`;
+    const status = open ? 'Currently open' : 'Closed / scheduled';
+    const moveButtons = `<div class="ward-move-controls">
+      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move ${esc(w.code)} up one position">↑ Up</button>
+      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="1" ${index === orderedWards.length - 1 ? 'disabled' : ''} title="Move ${esc(w.code)} down one position">↓ Down</button>
+    </div>`;
+    const lifecycleButton = open
+      ? `<button class="btn danger small" data-close-ward="${esc(w.id)}">Close Ward</button>`
+      : `<button class="btn secondary small" data-reopen-ward="${esc(w.id)}">Reopen</button>`;
+
+    return `<tr>
+      <td class="ward-list-code"><strong>${esc(w.code)}</strong></td>
+      <td><strong>${esc(w.display_name)}</strong><div class="ward-list-subtext">Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}</div></td>
+      <td><span class="ward-status"><span class="dot ${open ? 'active' : 'closed'}"></span>${esc(status)}</span></td>
+      <td>${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}</td>
+      <td>${esc(w.manager_section || '—')}</td>
+      <td>${moveButtons}</td>
+      <td><div class="ward-row-actions"><button class="btn secondary small" data-edit-ward="${esc(w.id)}">Edit</button>${lifecycleButton}</div></td>
+    </tr>`;
   }).join('');
+
   qsa('[data-move-ward]').forEach(b => { b.onclick = () => moveWard(b.dataset.moveWard, Number(b.dataset.moveDelta)); });
   qsa('[data-edit-ward]').forEach(b => { b.onclick = () => openWardModal(state.wards.find(w => w.id === b.dataset.editWard)); });
   qsa('[data-close-ward]').forEach(b => { b.onclick = () => closeWard(b.dataset.closeWard); });
@@ -172,7 +197,7 @@ async function moveWard(wardId, delta) {
     await reorderWards(result.items.map(ward => ward.id));
     state.wards = result.items;
     fillWardSelects();
-    renderWardCards();
+    renderWardList();
     flash('Ward display order updated.', 'success');
   } catch (error) {
     flash(error.message || String(error), 'error', 7000);

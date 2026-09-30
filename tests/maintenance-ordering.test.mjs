@@ -25,13 +25,19 @@ test('Maintenance HTML exposes only Up/Down ordering controls, never numeric ord
   assert.doesNotMatch(html, /id="mWardOrder"/);
   assert.doesNotMatch(html, /id="itemOrder"/);
   assert.doesNotMatch(html, /<th>Order<\/th>/);
-  assert.match(html, /Use Up \/ Down on each ward card/);
+  assert.match(html, /Wards are shown in their actual display sequence from top to bottom/);
+  assert.match(html, /<tbody id="wardRows"><\/tbody>/);
+  assert.doesNotMatch(html, /id="wardCards"/);
   assert.match(html, /Use Up \/ Down to change the form sequence/);
 });
 
 test('Maintenance page treats ordering as dedicated list behavior', () => {
   const page = read('pages/maintenance-page.js');
   assert.match(page, /reorderWards/);
+  assert.match(page, /function renderWardList\(\)/);
+  assert.match(page, /<tr>/);
+  assert.doesNotMatch(page, /renderWardCards/);
+  assert.doesNotMatch(page, /ward-card/);
   assert.match(page, /moveOrderedItem\(state\.wards/);
   assert.match(page, /moveOrderedItem\(state\.items/);
   assert.doesNotMatch(page, /mWardOrder/);

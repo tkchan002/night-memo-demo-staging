@@ -1,9 +1,6 @@
 .maintenance-page .legacy-shell{max-width:1500px}
 .maint-page{display:none}.maint-page.active{display:block}
 .maint-toolbar{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.ward-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
-.ward-card{border:1px solid #aaa;background:#f8f7f1;padding:10px;box-shadow:inset 1px 1px 0 #fff}
-.ward-card h3{margin:0 0 5px;color:#00008b;font-size:1.05rem}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}.dot.active{background:#25823a}.dot.closed{background:#888}
 .audit-row{padding:8px 0;border-bottom:1px solid #ccc;font-size:.86rem}.audit-row code{color:#333}
 #capacityHistory,#maintStaffTable{margin-top:14px}
@@ -43,9 +40,22 @@
 .test-data-page .tag.subtle{border-color:#aaa;background:#eee;color:#555}
 
 @media(max-width:1150px){.test-data-controls{grid-template-columns:repeat(2,minmax(220px,1fr))}.test-data-actions{justify-content:flex-start}.demo-summary-grid{grid-template-columns:repeat(3,minmax(120px,1fr))}}
-@media(max-width:800px){.ward-cards{grid-template-columns:1fr}.maintenance-tabs .tab{min-width:auto}.test-data-controls{grid-template-columns:1fr}.demo-summary-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.demo-coverage-grid{grid-template-columns:1fr}.test-data-actions{justify-content:flex-start}}
+@media(max-width:800px){.maintenance-tabs .tab{min-width:auto}.test-data-controls{grid-template-columns:1fr}.demo-summary-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.demo-coverage-grid{grid-template-columns:1fr}.test-data-actions{justify-content:flex-start}}
 @media(max-width:520px){.demo-summary-grid{grid-template-columns:1fr}.demo-seed-row{align-items:stretch}.demo-seed-row{flex-direction:column}.test-data-batches-head{flex-direction:column}}
 
-/* Ordering is a list action, not an editable numeric property. */
-.ward-card-actions{margin-top:9px;align-items:center;flex-wrap:wrap}
-.ward-card-actions .btn[disabled],.data-table .btn[disabled]{opacity:.45;cursor:default}
+/* Ward ordering is represented by the visible top-to-bottom row sequence. */
+.ward-list-scroll{margin-top:10px}
+.ward-list-table{min-width:1020px}
+.ward-list-table th:nth-child(1){width:90px}
+.ward-list-table th:nth-child(2){min-width:210px}
+.ward-list-table th:nth-child(3){min-width:145px}
+.ward-list-table th:nth-child(4){min-width:145px}
+.ward-list-table th:nth-child(5){min-width:115px}
+.ward-list-table th:nth-child(6){width:150px}
+.ward-list-table th:nth-child(7){width:190px}
+.ward-list-code strong{font-size:1rem;color:#00008b}
+.ward-list-subtext{margin-top:3px;color:#666;font-size:.8rem;white-space:nowrap}
+.ward-status{display:inline-flex;align-items:center;white-space:nowrap}
+.ward-move-controls,.ward-row-actions{display:flex;gap:5px;align-items:center;flex-wrap:nowrap}
+.ward-move-controls .btn,.ward-row-actions .btn{white-space:nowrap}
+.ward-move-controls .btn[disabled],.data-table .btn[disabled]{opacity:.45;cursor:default}
