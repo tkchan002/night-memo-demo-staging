@@ -11,6 +11,7 @@ import {
   DIRECT_REPORT_KEYS, fullReportPayloadDefaults, normalizeReportPayload,
   normalizeDevice, formatDevice, formatDynamic,
 } from '../domain/report-model.js';
+import { wardRequiresPerBedGender } from '../domain/ward.js';
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
 import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
 
@@ -114,7 +115,7 @@ async function init() {
   if (!state.access) return;
   setupSubmissionUi();
   state.ward = state.access.wards || await getWardById(state.access.ward_id);
-  $('#wardFrom').textContent = state.ward.display_name || `Ward ${state.ward.code}`;
+  $('#wardFrom').textContent = state.ward.name;
   $('#wardContact').innerHTML = `Ext ${esc(state.ward.phone || '—')} &nbsp;&nbsp;&nbsp;<b>Fax:</b> Ext ${esc(state.ward.fax || '—')}`;
   $('#liveIndicator').textContent = DB_MODE === 'demo' ? 'Local demo mode' : 'Supabase live';
   $('#memoDate').value = todayISO();
@@ -172,7 +173,7 @@ async function loadForDate(date) {
     buildControls();
     fillPayload(result.draft?.payload || result.report?.payload || fullReportPayloadDefaults());
     renderStaffDataLists();
-    if (!state.operational) showStatus('error', `${state.ward.code} is not operational on ${toDisplayDate(date)}. Saving is disabled for this date.`);
+    if (!state.operational) showStatus('error', `${state.ward.name} is not operational on ${toDisplayDate(date)}. Saving is disabled for this date.`);
     else if (state.draft) showStatus('success', `Loaded saved draft for ${toDisplayDate(date)}. This draft has not been submitted.`);
     else if (state.report) showStatus('success', `Loaded current-cycle submitted memo for ${toDisplayDate(date)}.`);
     else showStatus('success', `Ready for ${toDisplayDate(date)}. Previous submissions are available through Get Data or History.`);
@@ -277,9 +278,9 @@ function dynamicRowHtml(item) {
 
 function setDynamicValue(item, value) { if (item.input_type === 'bed_chooser') setBeds(`dyn_${item.key}`, Array.isArray(value) ? value : []); else if (item.input_type === 'bed_or_count') setDeviceValue(`dyn_${item.key}`, value); else { const el = $(`#dyn_${CSS.escape(item.key)}`); if (!el) return; if (item.input_type === 'checkbox') el.checked = !!value; else el.value = value ?? ''; } }
 function getDynamicValue(item) { if (item.input_type === 'bed_chooser') return getBeds(`dyn_${item.key}`); if (item.input_type === 'bed_or_count') return getDeviceValue(`dyn_${item.key}`); const el = $(`#dyn_${CSS.escape(item.key)}`); if (!el) return null; return item.input_type === 'checkbox' ? el.checked : el.value; }
-function updateEmptyBedMode() { const mode = state.ward.empty_bed_gender_mode || 'male'; $('#emptyBedLabel').textContent = mode === 'female' ? 'Empty Bed F:' : mode === 'male' ? 'Empty Bed M:' : 'Empty Bed:'; $('#emptyDetailBlock').classList.toggle('hidden', mode !== 'dynamic'); calcEmpty(); }
+function updateEmptyBedMode() { const mode = state.ward.empty_bed_gender_mode || 'male'; $('#emptyBedLabel').textContent = mode === 'female' ? 'Empty Bed F:' : mode === 'male' ? 'Empty Bed M:' : 'Empty Bed:'; $('#emptyDetailBlock').classList.toggle('hidden', !wardRequiresPerBedGender(state.ward)); calcEmpty(); }
 function calcEmpty() { const total = Number($('#totalPatientM').value) || 0; const count = Math.max(0, (Number(state.capacity) || 0) - total); $('#emptyBedM').textContent = String(count); $('#emptyBedFormula').textContent = `(${state.capacity} - Total)`; return count; }
-function addEmptyDetail(value = {}) { const row = document.createElement('div'); row.className = 'empty-detail-row'; const dynamic = state.ward.empty_bed_gender_mode === 'dynamic'; row.innerHTML = `<input type="text" data-empty-location style="width:120px" placeholder="Bed / location" value="${esc(value.location || '')}">${dynamic ? '<select data-empty-gender><option value="">--</option><option value="M">Male</option><option value="F">Female</option></select>' : ''}<input type="text" data-empty-remark style="width:260px" placeholder="Remark" value="${esc(value.remark || '')}"><button class="btn-x" type="button">x</button>`; if (dynamic && value.gender) $('[data-empty-gender]', row).value = value.gender; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#emptyDetailRows').append(row); $('#emptyDetailBlock').classList.remove('hidden'); markDirty(); }
+function addEmptyDetail(value = {}) { const row = document.createElement('div'); row.className = 'empty-detail-row'; const mixed = wardRequiresPerBedGender(state.ward); row.innerHTML = `<input type="text" data-empty-location style="width:120px" placeholder="Bed / location" value="${esc(value.location || '')}">${mixed ? '<select data-empty-gender><option value="">--</option><option value="M">Male</option><option value="F">Female</option></select>' : ''}<input type="text" data-empty-remark style="width:260px" placeholder="Remark" value="${esc(value.remark || '')}"><button class="btn-x" type="button">x</button>`; if (mixed && value.gender) $('[data-empty-gender]', row).value = value.gender; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#emptyDetailRows').append(row); $('#emptyDetailBlock').classList.remove('hidden'); markDirty(); }
 function collectEmptyDetails() { return $$('.empty-detail-row', $('#emptyDetailRows')).map(row => ({ location: $('[data-empty-location]', row)?.value.trim() || '', gender: $('[data-empty-gender]', row)?.value || null, remark: $('[data-empty-remark]', row)?.value.trim() || '' })).filter(x => x.location || x.gender || x.remark); }
 function addEB(bed = '', dest = '') { const row = document.createElement('div'); row.className = 'fr'; row.style.marginBottom = '4px'; let options = '<option value="">--</option>'; for (let i = 1; i <= bedCeiling(); i += 1) options += `<option value="${i}" ${String(bed) === String(i) ? 'selected' : ''}>${i}</option>`; row.innerHTML = `<select class="eB" style="width:70px">${options}</select><span style="padding:0 8px;font-size:1rem;font-weight:700">--&gt;</span><input type="text" class="eD" style="width:150px" placeholder="e.g. KH3A" value="${esc(dest || '')}"><button class="btn-x" type="button" style="margin-left:6px">x</button>`; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#ebRows').append(row); }
 function addPt(b = '', n = '', dx = '') { addTableRow('#ptBody', [b, n, dx], ['Bed', 'Name', 'Dx/Condition']); }

@@ -2,7 +2,7 @@ export { DB_MODE, supabase } from './client.js';
 export { ensureDemoState, resetDemoDatabase } from './demo-state.js';
 export { getCurrentAccess } from './repositories/access-repository.js';
 export {
-  getAllWards, getWardById, getWardByCode, getOperatingPeriods, getWardsForDate,
+  getAllWards, getWardById, getWardByName, getOperatingPeriods, getWardsForDate,
   isWardOperational, getCapacityHistory, getWardCapacity, getCapacitiesForWards, createWard, updateWard, reorderWards,
   addOperatingPeriod, closeOperatingPeriod, addCapacity,
 } from './repositories/ward-repository.js';

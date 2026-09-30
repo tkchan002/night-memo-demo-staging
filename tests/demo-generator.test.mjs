@@ -10,8 +10,7 @@ import {
 function wards(count) {
   return Array.from({ length: count }, (_, index) => ({
     id: `ward-${index + 1}`,
-    code: `W${String(index + 1).padStart(2, '0')}`,
-    display_name: `Ward ${index + 1}`,
+    name: `W${String(index + 1).padStart(2, '0')}`,
     display_order: index + 1,
     active: true,
   }));
@@ -58,8 +57,8 @@ test('30 active wards scale automatically and create two-session data', () => {
 
   const byWard = new Map();
   for (const report of bundle.reports) {
-    if (!byWard.has(report.ward_code)) byWard.set(report.ward_code, []);
-    byWard.get(report.ward_code).push(report);
+    if (!byWard.has(report.ward_name)) byWard.set(report.ward_name, []);
+    byWard.get(report.ward_name).push(report);
     assert.equal(report.report_date, '2026-09-28');
   }
   assert.equal([...byWard.values()].filter(rows => rows.length === 2).length, 25);
@@ -113,4 +112,50 @@ test('synthetic clinical names are visibly marked DEMO and current scenario guar
   ]).filter(Boolean);
   assert.ok(names.length > 0);
   assert.ok(names.every(name => /DEMO/.test(name)));
+});
+
+
+test('current demo submissions stay comfortably inside the 120-minute Manager window', () => {
+  const list = wards(12);
+  const capacities = Object.fromEntries(list.map(ward => [ward.id, 40]));
+  const bundle = generateDemoDataBundle({
+    wards: list,
+    periods: periodsFor(list),
+    capacities,
+    items: ITEMS,
+    scenario: 'typical',
+    reportDate: '2026-09-28',
+    now: new Date('2026-09-28T13:00:00.000Z'),
+    seed: 4404,
+  });
+
+  const current = bundle.reports.filter(report => report.session === 'current');
+  const previous = bundle.reports.filter(report => report.session === 'previous');
+  assert.ok(current.length > 0);
+  assert.ok(current.every(report => report.submitted_minutes_ago >= 5 && report.submitted_minutes_ago <= 55));
+  assert.ok(previous.every(report => report.submitted_minutes_ago >= 360 && report.submitted_minutes_ago <= 540));
+});
+
+
+test('generated AM/PM staffing is numeric only and uses 0.5 increments', () => {
+  const list = wards(12);
+  const capacities = Object.fromEntries(list.map((ward, index) => [ward.id, 28 + (index % 5) * 4]));
+  const bundle = generateDemoDataBundle({
+    wards: list,
+    periods: periodsFor(list),
+    capacities,
+    items: ITEMS,
+    scenario: 'typical',
+    reportDate: '2026-09-28',
+    now: new Date('2026-09-28T13:00:00.000Z'),
+    seed: 5505,
+  });
+
+  for (const report of bundle.reports) {
+    for (const value of [report.payload.staffAM, report.payload.staffPM]) {
+      assert.match(String(value), /^\d+(?:\.5)?$/);
+      assert.doesNotMatch(String(value), /RN|EN/i);
+      assert.equal(Number(value) * 2, Math.round(Number(value) * 2));
+    }
+  }
 });

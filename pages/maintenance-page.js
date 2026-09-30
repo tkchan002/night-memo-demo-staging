@@ -11,6 +11,7 @@ import { flash } from '../core/ui.js';
 import { setAppHeader } from '../components/app-shell.js';
 import { initMaintenanceTestData, refreshGeneratedDemoBatches } from './maintenance-test-data.js';
 import { moveOrderedItem, sortByOrder } from '../domain/ordering.js';
+import { emptyBedGenderLabel, validateWardName } from '../domain/ward.js';
 
 const $ = qs;
 const state = {
@@ -26,31 +27,12 @@ const state = {
   loading: {},
 };
 
-const EMPTY_BED_GENDER_LABELS = Object.freeze({
-  male: 'Male',
-  female: 'Female',
-  dynamic: 'Mixed',
-  none: 'Not applicable',
-});
-
-function emptyBedGenderLabel(value) {
-  return EMPTY_BED_GENDER_LABELS[value] || value || 'Not applicable';
-}
-
-function installUiTerminology() {
-  // Keep the stored value `dynamic` for backward compatibility, but never
-  // expose that implementation term to Maintenance users.
-  const mixedOption = $('#mWardGender option[value="dynamic"]');
-  if (mixedOption) mixedOption.textContent = 'Mixed';
-}
-
 init().catch(error => { console.error(error); flash(error.message || String(error), 'error', 8000); });
 
 async function init() {
   state.access = await requireRole('maintenance');
   if (!state.access) return;
   setAppHeader({ title: 'Night Memo Maintenance', subtitle: 'Configuration and lifecycle console', access: state.access, mode: DB_MODE });
-  installUiTerminology();
   initMaintenanceTestData();
   bind();
   // Only the visible Wards tab is on the initial critical path. Accounts,
@@ -141,7 +123,7 @@ async function ensureItemsLoaded(force = false) {
 }
 
 function fillWardSelects() {
-  const opts = '<option value="">— None —</option>' + state.wards.map(w => `<option value="${esc(w.id)}">${esc(w.code)} — ${esc(w.display_name)}</option>`).join('');
+  const opts = '<option value="">— None —</option>' + state.wards.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('');
   ['#capacityWard', '#staffWard', '#accountWard'].forEach(sel => {
     const el = $(sel), old = el.value; el.innerHTML = opts;
     if ([...el.options].some(o => o.value === old)) el.value = old;
@@ -166,16 +148,16 @@ function renderWardList() {
     const open = periods.some(p => p.ward_id === w.id && p.start_date <= today && (!p.end_date || p.end_date >= today));
     const status = open ? 'Currently open' : 'Closed / scheduled';
     const moveButtons = `<div class="ward-move-controls">
-      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move ${esc(w.code)} up one position">↑ Up</button>
-      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="1" ${index === orderedWards.length - 1 ? 'disabled' : ''} title="Move ${esc(w.code)} down one position">↓ Down</button>
+      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move ${esc(w.name)} up one position">↑ Up</button>
+      <button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="1" ${index === orderedWards.length - 1 ? 'disabled' : ''} title="Move ${esc(w.name)} down one position">↓ Down</button>
     </div>`;
     const lifecycleButton = open
       ? `<button class="btn danger small" data-close-ward="${esc(w.id)}">Close Ward</button>`
       : `<button class="btn secondary small" data-reopen-ward="${esc(w.id)}">Reopen</button>`;
 
     return `<tr>
-      <td class="ward-list-code"><strong>${esc(w.code)}</strong></td>
-      <td><strong>${esc(w.display_name)}</strong><div class="ward-list-subtext">Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}</div></td>
+      <td class="ward-list-code"><strong>${esc(w.name)}</strong></td>
+      <td><div class="ward-list-subtext">Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}</div></td>
       <td><span class="ward-status"><span class="dot ${open ? 'active' : 'closed'}"></span>${esc(status)}</span></td>
       <td>${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}</td>
       <td>${esc(w.manager_section || '—')}</td>
@@ -213,20 +195,21 @@ async function refreshWardConfiguration() {
 function openWardModal(w = null) {
   state.editingWard = w;
   $('#wardModalTitle').textContent = w ? 'Edit Ward' : 'Add Ward';
-  $('#editWardId').value = w?.id || ''; $('#mWardCode').value = w?.code || ''; $('#mWardName').value = w?.display_name || '';
+  $('#editWardId').value = w?.id || ''; $('#mWardName').value = w?.name || '';
   $('#mWardPhone').value = w?.phone || ''; $('#mWardFax').value = w?.fax || ''; $('#mWardGender').value = w?.empty_bed_gender_mode || 'male';
   $('#mWardSection').value = w?.manager_section || 'Male'; $('#mWardStart').value = todayISO();
   $('#mWardEnd').value = ''; $('#mWardCapacity').value = '40'; $('#mWardNote').value = '';
-  qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w)); $('#mWardCode').disabled = !!w; openModal('#wardModal');
+  qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w)); openModal('#wardModal');
 }
 async function saveWardFromModal(event) {
   event.preventDefault();
   try {
+    const wardName = validateWardName($('#mWardName').value);
     if (state.editingWard) {
-      await updateWard(state.editingWard.id, { display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value });
+      await updateWard(state.editingWard.id, { name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value });
       flash('Ward updated.', 'success');
     } else {
-      await createWard({ code: $('#mWardCode').value.trim(), display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
+      await createWard({ name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
       flash('Ward created. Create its login account in Accounts.', 'success', 6000);
     }
     closeModal('#wardModal'); await refreshWardConfiguration();
@@ -246,7 +229,7 @@ async function renderCapacityHistory() {
 }
 async function saveCapacity(event) { event.preventDefault(); const wardId = $('#capacityWard').value; if (!wardId) return; try { await addCapacity(wardId, $('#capFrom').value, $('#capBeds').value, $('#capNote').value.trim()); closeModal('#capacityModal'); flash('Capacity change saved with effective date.', 'success'); await renderCapacityHistory(); } catch (error) { flash(error.message || String(error), 'error'); } }
 function renderAccounts() {
-  $('#accountRows').innerHTML = state.accounts.map(a => `<tr><td>${esc(a.login_id)}</td><td>${esc(a.role)}</td><td>${esc(a.wards?.code || '—')}</td><td>${a.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Disabled</span>'}</td><td><div class="inline-actions"><button class="btn secondary small" data-edit-account="${esc(a.auth_user_id)}">Edit</button><button class="btn secondary small" data-password="${esc(a.auth_user_id)}">Reset Password</button></div></td></tr>`).join('');
+  $('#accountRows').innerHTML = state.accounts.map(a => `<tr><td>${esc(a.login_id)}</td><td>${esc(a.role)}</td><td>${esc(a.wards?.name || '—')}</td><td>${a.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Disabled</span>'}</td><td><div class="inline-actions"><button class="btn secondary small" data-edit-account="${esc(a.auth_user_id)}">Edit</button><button class="btn secondary small" data-password="${esc(a.auth_user_id)}">Reset Password</button></div></td></tr>`).join('');
   qsa('[data-edit-account]').forEach(b => { b.onclick = () => openAccountModal(state.accounts.find(a => a.auth_user_id === b.dataset.editAccount)); });
   qsa('[data-password]').forEach(b => { b.onclick = () => { const a = state.accounts.find(x => x.auth_user_id === b.dataset.password); $('#passwordUserId').value = a.auth_user_id; $('#newPassword').value = ''; openModal('#passwordModal'); }; });
 }

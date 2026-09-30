@@ -194,7 +194,7 @@ function renderSubmissionMonitor() {
     else if (source && report) sourceLabel = 'Synced';
     else if (source) sourceLabel = 'Earlier submission in document';
     return `<tr class="${newer ? 'newer' : status.state}">
-      <td><b>${esc(ward.code)}</b></td>
+      <td><b>${esc(ward.name)}</b></td>
       <td>${esc(status.label)}</td>
       <td>${esc(submittedAt)}</td>
       <td>${esc(sourceLabel)}</td>
@@ -652,7 +652,7 @@ async function openSourceReport(wardId) {
   const items = entry.report.report_item_snapshot?.length
     ? entry.report.report_item_snapshot.map(item => ({ ...item, __historical: true }))
     : state.items;
-  $('#sourceReportTitle').textContent = `${entry.ward.code} submitted ward memo`;
+  $('#sourceReportTitle').textContent = `${entry.ward.name} submitted ward memo`;
   $('#sourceReportBody').innerHTML = renderFullReport({ ward: entry.ward, report: entry.report, capacity: entry.capacity, items });
   $('#sourceReportModal').hidden = false;
 }

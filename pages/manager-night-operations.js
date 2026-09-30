@@ -66,7 +66,7 @@ function render() {
 
   $('#nightWardRosterGrid').innerHTML = model.wardRosters.map(renderWardCard).join('') || '<div class="night-roster-empty">No active wards found.</div>';
   $('#nightRunnerList').innerHTML = model.runners.length
-    ? `<table class="night-runner-table"><thead><tr><th>Ward</th><th>Rank</th><th>Name</th><th>Appointment Date</th></tr></thead><tbody>${model.runners.map(nurse => `<tr><td><b>${esc(nurse.ward?.code || '')}</b></td><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')}</tbody></table>`
+    ? `<table class="night-runner-table"><thead><tr><th>Ward</th><th>Rank</th><th>Name</th><th>Appointment Date</th></tr></thead><tbody>${model.runners.map(nurse => `<tr><td><b>${esc(nurse.ward?.name || '')}</b></td><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')}</tbody></table>`
     : '<div class="night-roster-empty">No Night Runner recorded for this reporting night.</div>';
 }
 
@@ -74,7 +74,7 @@ function renderWardCard(row) {
   const nurses = row.nurses || [];
   const updated = row.updatedAt ? `Updated ${formatDateTime(row.updatedAt, 'en-GB')}` : 'No ward staff list saved this shift';
   return `<article class="night-ward-card">
-    <div class="night-ward-card-head"><span class="night-ward-code">${esc(row.ward?.code || row.ward?.displayName || '')}</span><span class="night-ward-count">${nurses.length} staff</span></div>
+    <div class="night-ward-card-head"><span class="night-ward-code">${esc(row.ward?.name || '')}</span><span class="night-ward-count">${nurses.length} staff</span></div>
     ${nurses.length ? `<table class="night-ward-table"><thead><tr><th>Rank</th><th>Name</th><th>Appointment Date</th></tr></thead><tbody>${nurses.map(nurse => `<tr><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')}</tbody></table>` : '<div class="night-roster-empty">No night staff saved for this shift.</div>'}
     <div class="night-roster-updated">${esc(updated)}</div>
   </article>`;

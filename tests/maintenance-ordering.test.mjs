@@ -23,6 +23,9 @@ test('ordering domain moves entries and normalizes to sequential positions', () 
 test('Maintenance HTML exposes only Up/Down ordering controls, never numeric order fields', () => {
   const html = read('maintenance.html');
   assert.doesNotMatch(html, /id="mWardOrder"/);
+  assert.doesNotMatch(html, /id="mWardCode"/);
+  assert.doesNotMatch(html, /Ward Code|Display Name \/ Contact/);
+  assert.match(html, /<label>Ward Name<\/label>/);
   assert.doesNotMatch(html, /id="itemOrder"/);
   assert.doesNotMatch(html, /<th>Order<\/th>/);
   assert.match(html, /Wards are shown in their actual display sequence from top to bottom/);

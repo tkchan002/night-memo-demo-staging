@@ -6,9 +6,9 @@ const REPORT_DATE = '2026-09-28';
 const NOW = new Date('2026-09-28T13:00:00.000Z');
 
 const wards = [
-  { id: 'w1', code: 'A1', display_name: 'Ward A1', display_order: 1, active: false, empty_bed_gender_mode: 'male' },
-  { id: 'w2', code: 'B2', display_name: 'Ward B2', display_order: 2, active: true, empty_bed_gender_mode: 'dynamic' },
-  { id: 'w3', code: 'C3', display_name: 'Ward C3', display_order: 3, active: true, empty_bed_gender_mode: 'female' },
+  { id: 'w1', name: 'A1', display_order: 1, active: false, empty_bed_gender_mode: 'male' },
+  { id: 'w2', name: 'B2', display_order: 2, active: true, empty_bed_gender_mode: 'mixed' },
+  { id: 'w3', name: 'C3', display_order: 3, active: true, empty_bed_gender_mode: 'female' },
 ];
 
 const periods = [
@@ -58,7 +58,7 @@ function hasMeaningful(value) {
 test('selected-date operating periods override present-day ward active flag', () => {
   const bundle = makeBundle();
   assert.equal(bundle.meta.active_wards, 2);
-  assert.deepEqual(new Set(bundle.reports.map(r => r.ward_code)), new Set(['A1', 'B2']));
+  assert.deepEqual(new Set(bundle.reports.map(r => r.ward_name)), new Set(['A1', 'B2']));
 });
 
 test('comprehensive batch covers every Ward entry structure and effective configured item', () => {
@@ -91,7 +91,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
   for (const key of movementKeys) assert.ok(bundle.reports.some(r => Number(r.payload[key]) > 0), `${key} should be exercised`);
 
   for (const report of bundle.reports) {
-    const cap = capacities[wards.find(w => w.code === report.ward_code).id];
+    const cap = capacities[wards.find(w => w.name === report.ward_name).id];
     assert.ok(Number(report.payload.totalPatientM) >= 0 && Number(report.payload.totalPatientM) <= cap);
     assert.equal(Number(report.payload.emptyBeds.count), cap - Number(report.payload.totalPatientM));
     assert.match(String(report.payload.staffAM), /^\d+(?:\.5)?$/);
@@ -111,7 +111,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
       ...report.payload.intubations.map(row => row[0]),
       ...report.payload.earlyBirds.map(row => row.bed),
     ].filter(Boolean).map(Number).filter(Number.isFinite);
-    assert.ok(referencedBeds.every(bed => bed >= 1 && bed <= Number(report.payload.totalPatientM)), `occupied-bed references must not point at an empty bed in ${report.ward_code}`);
+    assert.ok(referencedBeds.every(bed => bed >= 1 && bed <= Number(report.payload.totalPatientM)), `occupied-bed references must not point at an empty bed in ${report.ward_name}`);
   }
 
   assert.ok(bundle.reports.some(r => r.payload.emptyBeds.details.some(d => d.location && /^[MF]$/.test(d.gender) && d.remark)));

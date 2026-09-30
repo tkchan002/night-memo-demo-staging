@@ -23,7 +23,7 @@ test('special empty beds print as individual gendered notes', () => {
 
 test('manager document is generated from current ward source data and remains a separate structure', () => {
   const bundle = [{
-    ward: { id: 'w1', code: 'C10', empty_bed_gender_mode: 'male' },
+    ward: { id: 'w1', name: 'C10', empty_bed_gender_mode: 'male' },
     capacity: 40,
     report: { id: 'r1', ward_id: 'w1', submitted_at: '2026-09-29T13:05:00Z', payload: {
       admissionEC: '3', admissionCC: '0', transferIn: '1', discharge: '2', transferOut: '0', death: '0', totalPatientM: '38',
@@ -36,6 +36,8 @@ test('manager document is generated from current ward source data and remains a 
   }];
   const doc = buildManagerMemoDocument({ bundle, items: [], reportingDate: '2026-09-29' });
   assert.equal(doc.header.date, '29/09/2026');
+  assert.equal(doc.header.fromName, '');
+  assert.equal(Object.hasOwn(doc.header, 'to'), false);
   assert.equal(doc.mainTableRows[0].ward, 'C10');
   assert.equal(doc.mainTableRows[0].emptyBed, '1M (TB), 1M (HZ)');
   assert.match(doc.clinicalNotesHtml, /Increasing oxygen requirement/);

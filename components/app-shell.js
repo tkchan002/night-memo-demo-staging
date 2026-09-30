@@ -15,7 +15,7 @@ export function setAppHeader({ title, subtitle = '', access = null, mode = 'live
   if (subtitleEl) subtitleEl.textContent = subtitle;
   if (userEl && access) {
     userEl.textContent = access.role === 'ward'
-      ? (access.wards?.code || access.login_id)
+      ? (access.wards?.name || access.login_id)
       : (access.display_name || access.login_id);
   }
   if (modeEl) modeEl.innerHTML = modeBadge(mode);

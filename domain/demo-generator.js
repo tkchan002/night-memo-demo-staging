@@ -5,8 +5,9 @@ import {
   normalizeDevice,
   normalizeReportPayload,
 } from './report-model.js';
+import { wardRequiresPerBedGender } from './ward.js';
 
-export const GENERATED_DEMO_FORMAT = 'night-memo-generated-v1';
+export const GENERATED_DEMO_FORMAT = 'night-memo-generated-v2';
 
 export const DEMO_SCENARIOS = Object.freeze({
   typical: Object.freeze({
@@ -131,10 +132,10 @@ function pickUniqueBeds(rng, capacity, count, excluded = new Set()) {
   return result;
 }
 
-function syntheticPatientName(wardCode, sequence, rng) {
+function syntheticPatientName(wardName, sequence, rng) {
   const surname = choose(rng, SURNAMES);
   const given = choose(rng, GIVEN_NAMES);
-  return `${surname} ${given} [DEMO ${wardCode}-${String(sequence).padStart(2, '0')}]`;
+  return `${surname} ${given} [DEMO ${wardName}-${String(sequence).padStart(2, '0')}]`;
 }
 
 function formatAppointment(value) {
@@ -146,8 +147,8 @@ function formatAppointment(value) {
 function configuredStaffForWard(staffByWard, ward) {
   if (!staffByWard) return [];
   const rows = staffByWard instanceof Map
-    ? (staffByWard.get(ward.id) || staffByWard.get(ward.code) || [])
-    : (staffByWard[ward.id] || staffByWard[ward.code] || []);
+    ? (staffByWard.get(ward.id) || staffByWard.get(ward.name) || [])
+    : (staffByWard[ward.id] || staffByWard[ward.name] || []);
   return asArray(rows).filter(row => row && row.active !== false && row.name);
 }
 
@@ -175,7 +176,7 @@ function syntheticNurses(ward, rng, capacity, staffByWard) {
     const index = nurses.length;
     nurses.push({
       role: roles[index % roles.length],
-      name: `DEMO ${ward.code} ${index === count - 1 ? 'RELIEF' : 'NURSE'} ${index + 1}`,
+      name: `DEMO ${ward.name} ${index === count - 1 ? 'RELIEF' : 'NURSE'} ${index + 1}`,
       appt: index === count - 1 ? '01/08/2026' : '',
       runner: false,
       source: 'free_text',
@@ -276,7 +277,7 @@ function directValue(item, preferred, rng, scenario) {
 }
 
 function emptyBedDetails(ward, emptyCount, rng) {
-  if (ward?.empty_bed_gender_mode !== 'dynamic' || emptyCount <= 0) return [];
+  if (!wardRequiresPerBedGender(ward) || emptyCount <= 0) return [];
   const count = Math.min(emptyCount, chance(rng, 0.35) ? 2 : 1);
   const remarks = ['D room', 'TB', 'HZ', 'Side room'];
   return Array.from({ length: count }, (_, index) => ({
@@ -297,18 +298,18 @@ function clinicalRows({ ward, capacity, rng, scenario, currentSession }) {
     const count = chance(rng, scenario === DEMO_SCENARIOS.surge ? 0.45 : 0.22) ? 2 : 1;
     const beds = pickUniqueBeds(rng, capacity, count);
     for (const bed of beds) {
-      patients.push([bed, syntheticPatientName(ward.code, sequence++, rng), choose(rng, CONDITION_TEXTS)]);
+      patients.push([bed, syntheticPatientName(ward.name, sequence++, rng), choose(rng, CONDITION_TEXTS)]);
     }
   }
 
   if (chance(rng, scenario.consultationRate * multiplier)) {
     const bed = pickUniqueBeds(rng, capacity, 1)[0] || '1';
-    consultations.push([bed, syntheticPatientName(ward.code, sequence++, rng), choose(rng, CONSULT_TEXTS)]);
+    consultations.push([bed, syntheticPatientName(ward.name, sequence++, rng), choose(rng, CONSULT_TEXTS)]);
   }
 
   if (chance(rng, scenario.intubationRate * multiplier)) {
     const bed = pickUniqueBeds(rng, capacity, 1)[0] || '1';
-    const patient = syntheticPatientName(ward.code, sequence++, rng);
+    const patient = syntheticPatientName(ward.name, sequence++, rng);
     const demoNo = `D${String(Math.floor(rng() * 999999)).padStart(6, '0')}`;
     const [diagnosis, reason, type, requestedBy, location, outcome] = choose(rng, INTUBATION_CASES);
     intubations.push([bed, `${patient} / ${demoNo}`, diagnosis, reason, type, requestedBy, location, outcome]);
@@ -392,7 +393,7 @@ function buildSessionPayload({ ward, capacity, items, staffByWard, rng, scenario
 
   const signer = payload.nurses.find(nurse => nurse.source === 'ward_staff') || payload.nurses[0];
   payload.sigRank = signer?.role || 'RN';
-  payload.sigName = signer?.name || `DEMO ${ward.code} NURSE 1`;
+  payload.sigName = signer?.name || `DEMO ${ward.name} NURSE 1`;
   payload.sigAppt = signer?.appt || '01/08/2026';
 
   return normalizeReportPayload(payload);
@@ -402,7 +403,7 @@ function createReport({ ward, reportDate, submittedAt, submittedMinutesAgo, payl
   const normalized = normalizeReportPayload(payload);
   normalized.savedAt = submittedAt.toISOString();
   return {
-    ward_code: String(ward.code),
+    ward_name: String(ward.name),
     report_date: reportDate,
     // submitted_at is used for preview only. During import the server recomputes
     // submitted_at from submitted_minutes_ago so Manager and the importer share
@@ -415,9 +416,9 @@ function createReport({ ward, reportDate, submittedAt, submittedMinutesAgo, payl
   };
 }
 
-function targetCurrentReport(reports, wardCode = null) {
-  return reports.find(report => report.session === 'current' && (!wardCode || report.ward_code === wardCode))
-    || reports.find(report => !wardCode || report.ward_code === wardCode)
+function targetCurrentReport(reports, wardName = null) {
+  return reports.find(report => report.session === 'current' && (!wardName || report.ward_name === wardName))
+    || reports.find(report => !wardName || report.ward_name === wardName)
     || null;
 }
 
@@ -512,17 +513,17 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
 
   if (!current.some(report => !report.payload.nilSpecial && report.payload.patients.length)) {
     const bed = pickUniqueBeds(rng, capacity, 1)[0] || '1';
-    primary.payload.patients = [[bed, syntheticPatientName(primary.ward_code, sequence++, rng), choose(rng, CONDITION_TEXTS)]];
+    primary.payload.patients = [[bed, syntheticPatientName(primary.ward_name, sequence++, rng), choose(rng, CONDITION_TEXTS)]];
     primary.payload.nilSpecial = false;
   }
   if (!current.some(report => !report.payload.nilConsultation && report.payload.consultations.length)) {
     const bed = pickUniqueBeds(rng, capacity, 1)[0] || '1';
-    primary.payload.consultations = [[bed, syntheticPatientName(primary.ward_code, sequence++, rng), choose(rng, CONSULT_TEXTS)]];
+    primary.payload.consultations = [[bed, syntheticPatientName(primary.ward_name, sequence++, rng), choose(rng, CONSULT_TEXTS)]];
     primary.payload.nilConsultation = false;
   }
   if (!current.some(report => !report.payload.nilIntubation && report.payload.intubations.length)) {
     const bed = pickUniqueBeds(rng, capacity, 1)[0] || '1';
-    const patient = syntheticPatientName(primary.ward_code, sequence++, rng);
+    const patient = syntheticPatientName(primary.ward_name, sequence++, rng);
     const [diagnosis, reason, type, requestedBy, location, outcome] = choose(rng, INTUBATION_CASES);
     primary.payload.intubations = [[bed, `${patient} / D000999`, diagnosis, reason, type, requestedBy, location, outcome]];
     primary.payload.nilIntubation = false;
@@ -536,13 +537,13 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
   }
   if (!reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'free_text'))) {
     primary.payload.nurses = [...(primary.payload.nurses || []), {
-      role: 'RN', name: `DEMO ${primary.ward_code} RELIEF NURSE`, appt: '01/08/2026', runner: false, source: 'free_text', staffId: null,
+      role: 'RN', name: `DEMO ${primary.ward_name} RELIEF NURSE`, appt: '01/08/2026', runner: false, source: 'free_text', staffId: null,
     }];
   }
 
   const wardWithStaff = activeWards.find(ward => configuredStaffForWard(staffByWard, ward).length);
   if (wardWithStaff && !reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'ward_staff'))) {
-    const target = targetCurrentReport(reports, wardWithStaff.code);
+    const target = targetCurrentReport(reports, wardWithStaff.name);
     const staff = configuredStaffForWard(staffByWard, wardWithStaff)[0];
     if (target && staff) {
       const linked = {
@@ -556,9 +557,9 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
     }
   }
 
-  const mixedWard = activeWards.find(ward => ward.empty_bed_gender_mode === 'dynamic');
+  const mixedWard = activeWards.find(wardRequiresPerBedGender);
   if (mixedWard) {
-    const target = targetCurrentReport(reports, mixedWard.code);
+    const target = targetCurrentReport(reports, mixedWard.name);
     if (target && !target.payload.emptyBeds?.details?.length) {
       const cap = Math.max(1, Number(target.preview_capacity) || 1);
       let total = clamp(asNumber(target.payload.totalPatientM, cap - 1), 0, cap);
@@ -638,7 +639,7 @@ function configuredItemCoverage(reports, items) {
 
 function buildCoverageSummary(reports, items, activeWards, staffByWard) {
   const itemCoverage = configuredItemCoverage(reports, items);
-  const mixedApplicable = activeWards.some(ward => ward.empty_bed_gender_mode === 'dynamic');
+  const mixedApplicable = activeWards.some(wardRequiresPerBedGender);
   const staffApplicable = activeWards.some(ward => configuredStaffForWard(staffByWard, ward).length);
   const hasBedOrCount = items.some(item => item.input_type === 'bed_or_count');
   const bedOrCountValues = reports.flatMap(report => [
@@ -689,7 +690,7 @@ export function generateDemoDataBundle({
   if (activeWards.length > 200) throw new Error('Demo generation is limited to 200 active wards per batch.');
   const missingCapacity = activeWards.filter(ward => !(Number(capacities?.[ward.id]) > 0));
   if (missingCapacity.length) {
-    throw new Error(`No positive bed capacity is configured for ${missingCapacity.map(ward => ward.code).join(', ')} on ${reportDate}.`);
+    throw new Error(`No positive bed capacity is configured for ${missingCapacity.map(ward => ward.name).join(', ')} on ${reportDate}.`);
   }
 
   const rng = createSeededRandom(seed);
@@ -765,7 +766,7 @@ export function generateDemoDataBundle({
       configured_report_items: effective.length,
       custom_report_items: effective.filter(item => !item.builtin).length,
       configured_staff: activeWards.reduce((sum, ward) => sum + configuredStaffForWard(staffByWard, ward).length, 0),
-      mixed_gender_wards: activeWards.filter(ward => ward.empty_bed_gender_mode === 'dynamic').length,
+      mixed_gender_wards: activeWards.filter(wardRequiresPerBedGender).length,
     },
     coverage,
     reports,

@@ -7,7 +7,7 @@ begin;
 -- Existing installations used sparse values such as 10, 20, 30 and a 999
 -- catch-all. Normalize both lists once to simple sequential positions.
 with ranked as (
-  select id, row_number() over (order by display_order, code, id)::integer as position
+  select id, row_number() over (order by display_order, name, id)::integer as position
   from public.wards
 )
 update public.wards w

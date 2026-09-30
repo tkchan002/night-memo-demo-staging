@@ -26,8 +26,7 @@ export function normalizeRosterSnapshot(raw = {}) {
     sourceKind: clean(raw.source_kind),
     ward: {
       id: ward.id || raw.ward_id || '',
-      code: clean(ward.code),
-      displayName: clean(ward.display_name || ward.code),
+      name: clean(ward.name),
       displayOrder: Number(ward.display_order) || 0,
     },
     nurses: (Array.isArray(raw.nurses) ? raw.nurses : []).map(normalizeNightNurse).filter(nurse => nurse.name),
@@ -37,7 +36,7 @@ export function normalizeRosterSnapshot(raw = {}) {
 function wardSort(a, b) {
   const order = (Number(a?.display_order) || 0) - (Number(b?.display_order) || 0);
   if (order) return order;
-  return clean(a?.code).localeCompare(clean(b?.code), undefined, { numeric: true, sensitivity: 'base' });
+  return clean(a?.name).localeCompare(clean(b?.name), undefined, { numeric: true, sensitivity: 'base' });
 }
 
 export function buildNightOperationsModel({ wards = [], snapshots = [] } = {}) {
@@ -58,8 +57,7 @@ export function buildNightOperationsModel({ wards = [], snapshots = [] } = {}) {
       return {
         ward: {
           id: ward.id,
-          code: clean(ward.code),
-          displayName: clean(ward.display_name || ward.code),
+          name: clean(ward.name),
           displayOrder: Number(ward.display_order) || 0,
         },
         updatedAt: snapshot?.updatedAt || null,

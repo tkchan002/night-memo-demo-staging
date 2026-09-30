@@ -87,11 +87,11 @@ export function sourceSnapshotFromBundle(bundle = []) {
     .filter(entry => entry?.report)
     .map(entry => ({
       ward_id: entry.ward?.id || entry.report?.ward_id || '',
-      ward_code: entry.ward?.code || '',
+      ward_name: entry.ward?.name || '',
       report_id: entry.report?.id || '',
       submitted_at: reportSubmittedAt(entry.report) || '',
     }))
-    .sort((a, b) => String(a.ward_code).localeCompare(String(b.ward_code)));
+    .sort((a, b) => String(a.ward_name).localeCompare(String(b.ward_name)));
 }
 
 export function isReportNewerThanSource(report, source) {
@@ -115,7 +115,7 @@ function mainRow(entry) {
   const { ward, report, capacity } = entry;
   const D = report ? normalizeReportPayload(report.payload) : {};
   return {
-    ward: ward?.code || '',
+    ward: ward?.name || '',
     admissionEC: report ? String(D.admissionEC ?? '') : '',
     admissionCC: report ? String(D.admissionCC ?? '') : '',
     transferIn: report ? String(D.transferIn ?? '') : '',
@@ -135,7 +135,7 @@ function infectionRow(entry) {
   const { ward, report } = entry;
   const D = report ? normalizeReportPayload(report.payload) : {};
   return {
-    ward: ward?.code || '',
+    ward: ward?.name || '',
     covid: report ? bedList(D.infBeds?.iCOV) : '',
     cre: report ? bedList(D.infBeds?.iCRE) : '',
     vre: report ? bedList(D.infBeds?.iVRE) : '',
@@ -152,15 +152,15 @@ function clinicalLines(bundle = []) {
   for (const { ward, report } of bundle) {
     if (!report) continue;
     const D = normalizeReportPayload(report.payload);
-    const code = ward?.code || 'Ward';
+    const wardName = ward?.name || 'Ward';
     if (!D.nilSpecial) for (const row of D.patients || []) {
-      if (row.some(Boolean)) lines.push(`${code}: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
+      if (row.some(Boolean)) lines.push(`${wardName}: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
     }
     if (!D.nilConsultation) for (const row of D.consultations || []) {
-      if (row.some(Boolean)) lines.push(`${code} consultation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
+      if (row.some(Boolean)) lines.push(`${wardName} consultation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
     }
     if (!D.nilIntubation) for (const row of D.intubations || []) {
-      if (row.some(Boolean)) lines.push(`${code} intubation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2] && `Dx ${row[2]}`, row[3] && `Reason ${row[3]}`].filter(Boolean).join(' · ')}`);
+      if (row.some(Boolean)) lines.push(`${wardName} intubation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2] && `Dx ${row[2]}`, row[3] && `Reason ${row[3]}`].filter(Boolean).join(' · ')}`);
     }
   }
   return lines;
@@ -172,7 +172,7 @@ function earlyBirdLines(bundle = []) {
     if (!report) continue;
     const D = normalizeReportPayload(report.payload);
     const rows = (D.earlyBirds || []).filter(row => row?.bed || row?.dest);
-    if (rows.length) lines.push(`${ward?.code || 'Ward'}: ${rows.map(row => `${row.bed || '?'} → ${row.dest || '?'}`).join('; ')}`);
+    if (rows.length) lines.push(`${ward?.name || 'Ward'}: ${rows.map(row => `${row.bed || '?'} → ${row.dest || '?'}`).join('; ')}`);
   }
   return lines;
 }
@@ -180,7 +180,7 @@ function earlyBirdLines(bundle = []) {
 function emptyBedLines(bundle = []) {
   return bundle
     .filter(entry => entry.report)
-    .map(entry => `${entry.ward?.code || 'Ward'}: ${formatManagerEmptyBeds(entry.ward, entry.report, entry.capacity)}`);
+    .map(entry => `${entry.ward?.name || 'Ward'}: ${formatManagerEmptyBeds(entry.ward, entry.report, entry.capacity)}`);
 }
 
 function additionalItemLines(bundle = [], items = []) {
@@ -194,7 +194,7 @@ function additionalItemLines(bundle = [], items = []) {
       const value = formatDynamic(D.dynamicItems?.[item.key]);
       return value && value !== '—' && value !== 'Nil' ? `${item.label}: ${value}` : '';
     }).filter(Boolean);
-    if (values.length) lines.push(`${ward?.code || 'Ward'}: ${values.join('; ')}`);
+    if (values.length) lines.push(`${ward?.name || 'Ward'}: ${values.join('; ')}`);
   }
   return lines;
 }

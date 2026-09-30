@@ -12,8 +12,8 @@ const nurse = normalizeNightNurse({ role: 'RN', name: 'Chan Tai Man', appt: '202
 assert.deepEqual(nurse, { role: 'RN', name: 'Chan Tai Man', appointmentDate: '05/09/2021', runner: true });
 
 const wards = [
-  { id: 'w2', code: 'E10', display_order: 2 },
-  { id: 'w1', code: 'C5', display_order: 1 },
+  { id: 'w2', name: 'E10', display_order: 2 },
+  { id: 'w1', name: 'C5', display_order: 1 },
 ];
 const snapshots = [
   { ward_id: 'w1', reporting_date: '2026-09-29', updated_at: '2026-09-29T14:00:00Z', nurses: [
@@ -27,7 +27,7 @@ const snapshots = [
 const model = buildNightOperationsModel({ wards, snapshots });
 assert.equal(model.nurseCount, 3);
 assert.equal(model.runnerCount, 1);
-assert.equal(model.wardRosters[0].ward.code, 'C5');
+assert.equal(model.wardRosters[0].ward.name, 'C5');
 assert.equal(model.runners[0].name, 'B');
 
 const staffHtml = renderNightStaffPrintHtml({ reportingDate: '2026-09-29', wardRosters: model.wardRosters, printedAt: new Date('2026-09-29T15:00:00Z') });

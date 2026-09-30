@@ -113,14 +113,14 @@ function renderCoverage(bundle) {
 }
 
 function renderPreview(bundle) {
-  const currentByWard = new Map(bundle.reports.filter(report => report.session === 'current').map(report => [report.ward_code, report]));
-  const previousByWard = new Map(bundle.reports.filter(report => report.session === 'previous').map(report => [report.ward_code, report]));
-  const rows = [...previousByWard.keys()].map(code => {
-    const current = currentByWard.get(code);
-    const previous = previousByWard.get(code);
+  const currentByWard = new Map(bundle.reports.filter(report => report.session === 'current').map(report => [report.ward_name, report]));
+  const previousByWard = new Map(bundle.reports.filter(report => report.session === 'previous').map(report => [report.ward_name, report]));
+  const rows = [...previousByWard.keys()].map(name => {
+    const current = currentByWard.get(name);
+    const previous = previousByWard.get(name);
     const summary = current ? summarizeGeneratedReport(current) : null;
     return `<tr>
-      <td><b>${esc(code)}</b></td>
+      <td><b>${esc(name)}</b></td>
       <td>${current ? `<span class="tag">Submitted ${esc(formatDateTime(current.submitted_at))}</span>` : '<span class="tag subtle">Not submitted in current window</span>'}</td>
       <td>${current ? `${esc(summary.total)} / ${esc(current.preview_capacity)} patients · ${esc(summary.empty)} empty` : '—'}</td>
       <td>${current ? esc(summary.clinical) : '—'}</td>
