@@ -84,7 +84,7 @@ create table if not exists public.report_items (
   label text not null,
   input_type text not null check (input_type in ('dropdown','checkbox','bed_chooser','free_text','number','bed_or_count')),
   options jsonb not null default '[]'::jsonb,
-  sort_order integer not null default 999,
+  sort_order integer not null default 0,
   active boolean not null default true,
   effective_from date not null default current_date,
   effective_to date,

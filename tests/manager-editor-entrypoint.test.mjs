@@ -4,9 +4,24 @@ import { readFile } from 'node:fs/promises';
 
 const root = new URL('../', import.meta.url);
 
-test('Manager root entry delegates to the modular Manager page and Night Operations modules', async () => {
-  const js = (await readFile(new URL('manager.js', root), 'utf8')).trim();
-  assert.equal(js, "import './pages/manager-page.js';\nimport './pages/manager-night-operations.js';");
+test('Manager root entry keeps the core page critical and Night Operations isolated', async () => {
+  const js = await readFile(new URL('manager.js', root), 'utf8');
+
+  assert.match(
+    js,
+    /import\s+['"]\.\/pages\/manager-page\.js['"];?/,
+    'Core Manager page must remain a static critical import.',
+  );
+  assert.match(
+    js,
+    /import\(\s*['"]\.\/pages\/manager-night-operations\.js['"]\s*\)\.catch\s*\(/,
+    'Night Operations must be isolated behind a dynamic import with failure handling.',
+  );
+  assert.doesNotMatch(
+    js,
+    /import\s+['"]\.\/pages\/manager-night-operations\.js['"];?/,
+    'Night Operations must not become a static import that can block Manager bootstrap.',
+  );
   assert.doesNotMatch(js, /manager-ui|legacy-manager|template-editor/);
 });
 
