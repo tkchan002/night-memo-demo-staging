@@ -3,7 +3,7 @@ export { ensureDemoState, resetDemoDatabase } from './demo-state.js';
 export { getCurrentAccess } from './repositories/access-repository.js';
 export {
   getAllWards, getWardById, getWardByCode, getOperatingPeriods, getWardsForDate,
-  isWardOperational, getCapacityHistory, getWardCapacity, getCapacitiesForWards, createWard, updateWard,
+  isWardOperational, getCapacityHistory, getWardCapacity, getCapacitiesForWards, createWard, updateWard, reorderWards,
   addOperatingPeriod, closeOperatingPeriod, addCapacity,
 } from './repositories/ward-repository.js';
 export { getWardStaff, getWardStaffForWards, saveWardStaff, setStaffActive } from './repositories/staff-repository.js';

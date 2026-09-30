@@ -105,7 +105,7 @@ export async function createWard(config) {
     const ward = {
       id: uid('ward'), code: config.code.toUpperCase(), display_name: config.display_name || `Ward ${config.code.toUpperCase()}`,
       phone: config.phone, fax: config.fax, empty_bed_gender_mode: config.empty_bed_gender_mode || 'male',
-      manager_section: config.manager_section || 'Male', display_order: Number(config.display_order) || 999,
+      manager_section: config.manager_section || 'Male', display_order: Math.max(0, ...state.wards.map(w => Number(w.display_order) || 0)) + 1,
       active: true, created_at: now, updated_at: now,
     };
     state.wards.push(ward);
@@ -118,7 +118,7 @@ export async function createWard(config) {
   const { data: ward, error } = await supabase.from('wards').insert({
     code: config.code.toUpperCase(), display_name: config.display_name, phone: config.phone, fax: config.fax,
     empty_bed_gender_mode: config.empty_bed_gender_mode, manager_section: config.manager_section,
-    display_order: Number(config.display_order) || 999, active: true,
+    active: true,
   }).select().single();
   if (error) throw error;
   const { error: periodError } = await supabase.from('ward_operating_periods').insert({ ward_id: ward.id, start_date: config.start_date, end_date: config.end_date || null, note: config.note || 'Ward opened' });
@@ -141,6 +141,40 @@ export async function updateWard(wardId, patch) {
   if (error) throw error;
   await recordAudit('ward.update', 'ward', wardId, patch);
   return data;
+}
+
+
+function orderedWardIds(orderedWards) {
+  const ids = (orderedWards || []).map(entry => typeof entry === 'string' ? entry : entry?.id).filter(Boolean);
+  if (new Set(ids).size !== ids.length) throw new Error('Ward order contains duplicate entries.');
+  return ids;
+}
+
+export async function reorderWards(orderedWards) {
+  const ids = orderedWardIds(orderedWards);
+  if (!ids.length) return [];
+
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    if (ids.length !== state.wards.length || state.wards.some(ward => !ids.includes(ward.id))) {
+      throw new Error('Ward order must include every configured ward exactly once.');
+    }
+    const positions = new Map(ids.map((id, index) => [id, index + 1]));
+    state.wards.forEach(ward => { ward.display_order = positions.get(ward.id); });
+    demoWrite(state);
+    return state.wards.slice().sort((a, b) => a.display_order - b.display_order);
+  }
+
+  const { error } = await supabase.rpc('reorder_wards', { p_order: ids });
+  if (error) {
+    const text = `${error.code || ''} ${error.message || ''} ${error.details || ''}`;
+    if (/PGRST202|42883|could not find.*function|function .* does not exist/i.test(text)) {
+      throw new Error('Ward reordering is not installed in Supabase. Run 20260930_maintenance_ordering.sql first.');
+    }
+    throw error;
+  }
+  await recordAudit('ward.reorder', 'ward', null, { order: ids });
+  return getAllWards();
 }
 
 export async function addOperatingPeriod(wardId, startDate, endDate = null, note = 'Ward reopened') {

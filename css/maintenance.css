@@ -45,3 +45,7 @@
 @media(max-width:1150px){.test-data-controls{grid-template-columns:repeat(2,minmax(220px,1fr))}.test-data-actions{justify-content:flex-start}.demo-summary-grid{grid-template-columns:repeat(3,minmax(120px,1fr))}}
 @media(max-width:800px){.ward-cards{grid-template-columns:1fr}.maintenance-tabs .tab{min-width:auto}.test-data-controls{grid-template-columns:1fr}.demo-summary-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.demo-coverage-grid{grid-template-columns:1fr}.test-data-actions{justify-content:flex-start}}
 @media(max-width:520px){.demo-summary-grid{grid-template-columns:1fr}.demo-seed-row{align-items:stretch}.demo-seed-row{flex-direction:column}.test-data-batches-head{flex-direction:column}}
+
+/* Ordering is a list action, not an editable numeric property. */
+.ward-card-actions{margin-top:9px;align-items:center;flex-wrap:wrap}
+.ward-card-actions .btn[disabled],.data-table .btn[disabled]{opacity:.45;cursor:default}

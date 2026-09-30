@@ -1,6 +1,6 @@
 import { requireRole, signOut } from '../auth.js';
 import {
-  getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard,
+  getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard, reorderWards,
   addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
   getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, reorderReportItems, getAuditLog,
   getMaintenanceWardsSnapshot, DB_MODE,
@@ -10,6 +10,7 @@ import { todayISO, toDisplayDate, formatDateTime } from '../core/dates.js';
 import { flash } from '../core/ui.js';
 import { setAppHeader } from '../components/app-shell.js';
 import { initMaintenanceTestData, refreshGeneratedDemoBatches } from './maintenance-test-data.js';
+import { moveOrderedItem, sortByOrder } from '../domain/ordering.js';
 
 const $ = qs;
 const state = {
@@ -130,7 +131,7 @@ async function ensureAccountsLoaded(force = false) {
 async function ensureItemsLoaded(force = false) {
   if (state.loaded.items && !force) { renderItems(); return; }
   if (state.loading.items) return state.loading.items;
-  $('#itemRows').innerHTML = '<tr><td colspan="7" class="muted">Loading report items...</td></tr>';
+  $('#itemRows').innerHTML = '<tr><td colspan="6" class="muted">Loading report items...</td></tr>';
   state.loading.items = (async () => {
     state.items = await getReportItems(todayISO(), true);
     state.loaded.items = true;
@@ -152,13 +153,31 @@ function fillWardSelects() {
 function renderWardCards() {
   const today = todayISO();
   const periods = state.periods || [];
-  $('#wardCards').innerHTML = state.wards.map(w => {
+  const orderedWards = sortByOrder(state.wards, 'display_order');
+  state.wards = orderedWards;
+  $('#wardCards').innerHTML = orderedWards.map((w, index) => {
     const open = periods.some(p => p.ward_id === w.id && p.start_date <= today && (!p.end_date || p.end_date >= today));
-    return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions"><button class="btn secondary small" data-edit-ward="${w.id}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${w.id}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${w.id}">Reopen</button>`}</div></div>`;
+    return `<div class="ward-card"><h3>${esc(w.code)}</h3><div><span class="dot ${open ? 'active' : 'closed'}"></span>${open ? 'Currently open' : 'Closed / scheduled'}</div><div class="muted" style="margin:5px 0">${esc(w.display_name)}<br>Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}<br>Empty-bed gender: ${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}<br>Memo: ${esc(w.manager_section)}</div><div class="inline-actions ward-card-actions"><button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move ward up">↑ Up</button><button class="btn secondary small" data-move-ward="${esc(w.id)}" data-move-delta="1" ${index === orderedWards.length - 1 ? 'disabled' : ''} title="Move ward down">↓ Down</button><button class="btn secondary small" data-edit-ward="${esc(w.id)}">Edit</button>${open ? `<button class="btn danger small" data-close-ward="${esc(w.id)}">Close Ward</button>` : `<button class="btn secondary small" data-reopen-ward="${esc(w.id)}">Reopen</button>`}</div></div>`;
   }).join('');
+  qsa('[data-move-ward]').forEach(b => { b.onclick = () => moveWard(b.dataset.moveWard, Number(b.dataset.moveDelta)); });
   qsa('[data-edit-ward]').forEach(b => { b.onclick = () => openWardModal(state.wards.find(w => w.id === b.dataset.editWard)); });
   qsa('[data-close-ward]').forEach(b => { b.onclick = () => closeWard(b.dataset.closeWard); });
   qsa('[data-reopen-ward]').forEach(b => { b.onclick = () => reopenWard(b.dataset.reopenWard); });
+}
+
+async function moveWard(wardId, delta) {
+  const result = moveOrderedItem(state.wards, wardId, delta, 'display_order');
+  if (!result.changed) return;
+  try {
+    await reorderWards(result.items.map(ward => ward.id));
+    state.wards = result.items;
+    fillWardSelects();
+    renderWardCards();
+    flash('Ward display order updated.', 'success');
+  } catch (error) {
+    flash(error.message || String(error), 'error', 7000);
+    await refreshWardConfiguration();
+  }
 }
 
 async function refreshWardConfiguration() {
@@ -171,7 +190,7 @@ function openWardModal(w = null) {
   $('#wardModalTitle').textContent = w ? 'Edit Ward' : 'Add Ward';
   $('#editWardId').value = w?.id || ''; $('#mWardCode').value = w?.code || ''; $('#mWardName').value = w?.display_name || '';
   $('#mWardPhone').value = w?.phone || ''; $('#mWardFax').value = w?.fax || ''; $('#mWardGender').value = w?.empty_bed_gender_mode || 'male';
-  $('#mWardSection').value = w?.manager_section || 'Male'; $('#mWardOrder').value = w?.display_order ?? 999; $('#mWardStart').value = todayISO();
+  $('#mWardSection').value = w?.manager_section || 'Male'; $('#mWardStart').value = todayISO();
   $('#mWardEnd').value = ''; $('#mWardCapacity').value = '40'; $('#mWardNote').value = '';
   qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w)); $('#mWardCode').disabled = !!w; openModal('#wardModal');
 }
@@ -179,10 +198,10 @@ async function saveWardFromModal(event) {
   event.preventDefault();
   try {
     if (state.editingWard) {
-      await updateWard(state.editingWard.id, { display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, display_order: Number($('#mWardOrder').value) || 999 });
+      await updateWard(state.editingWard.id, { display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value });
       flash('Ward updated.', 'success');
     } else {
-      await createWard({ code: $('#mWardCode').value.trim(), display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, display_order: $('#mWardOrder').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
+      await createWard({ code: $('#mWardCode').value.trim(), display_name: $('#mWardName').value.trim(), phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
       flash('Ward created. Create its login account in Accounts.', 'success', 6000);
     }
     closeModal('#wardModal'); await refreshWardConfiguration();
@@ -238,17 +257,17 @@ function appendMaintStaffEditor(s = { role: 'RN', name: '', appointment_date: ''
   qs('#maintStaffRows').append(tr);
 }
 function renderItems() {
-  const sorted = [...state.items].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+  const sorted = sortByOrder(state.items, 'sort_order');
+  state.items = sorted;
   $('#itemRows').innerHTML = sorted.map((i, index) => `<tr>
-    <td>${esc(i.sort_order)}</td>
     <td>${esc(i.section)}</td>
     <td>${esc(i.label)}${i.builtin ? ' <span class="tag subtle">Built-in</span>' : ''}</td>
     <td>${esc(i.input_type)}</td>
     <td>${esc(toDisplayDate(i.effective_from || ''))}${i.effective_to ? ` – ${esc(toDisplayDate(i.effective_to))}` : ''}</td>
     <td>${i.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Inactive</span>'}</td>
     <td><div class="inline-actions">
-      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move up">↑</button>
-      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="1" ${index === sorted.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="-1" ${index === 0 ? 'disabled' : ''} title="Move report item up">↑ Up</button>
+      <button class="btn secondary small" data-move-item="${esc(i.id)}" data-move-delta="1" ${index === sorted.length - 1 ? 'disabled' : ''} title="Move report item down">↓ Down</button>
       <button class="btn secondary small" data-edit-item="${esc(i.id)}">Edit</button>
     </div></td>
   </tr>`).join('');
@@ -257,25 +276,22 @@ function renderItems() {
 }
 
 async function moveReportItem(itemId, delta) {
-  const sorted = [...state.items].sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
-  const index = sorted.findIndex(item => item.id === itemId);
-  const target = index + delta;
-  if (index < 0 || target < 0 || target >= sorted.length) return;
-  [sorted[index], sorted[target]] = [sorted[target], sorted[index]];
-  const reordered = sorted.map((item, position) => ({ ...item, sort_order: (position + 1) * 10 }));
+  const result = moveOrderedItem(state.items, itemId, delta, 'sort_order');
+  if (!result.changed) return;
   try {
-    await reorderReportItems(reordered);
-    state.items = reordered;
+    await reorderReportItems(result.items.map(item => item.id));
+    state.items = result.items;
     renderItems();
-    flash('Report item order updated. Manager view uses this order immediately on refresh.', 'success');
+    flash('Report item order updated.', 'success');
   } catch (error) {
     flash(error.message || String(error), 'error', 7000);
     await ensureItemsLoaded(true);
   }
 }
+
 function openItemModal(i = null) {
   state.editingItem = i; $('#itemModalTitle').textContent = i ? 'Edit Report Item' : 'Add Report Item'; $('#itemId').value = i?.id || ''; $('#itemBuiltin').value = i?.builtin ? 'true' : 'false';
-  $('#itemKey').value = i?.key || ''; $('#itemLabel').value = i?.label || ''; $('#itemOrder').value = i?.sort_order ?? 999; $('#itemSection').value = i?.section || 'additional'; $('#itemType').value = i?.input_type || 'free_text';
+  $('#itemKey').value = i?.key || ''; $('#itemLabel').value = i?.label || ''; $('#itemSection').value = i?.section || 'additional'; $('#itemType').value = i?.input_type || 'free_text';
   $('#itemActive').value = String(i?.active ?? true); $('#itemOptions').value = (i?.options || []).join(', '); $('#itemFrom').value = i?.effective_from || todayISO(); $('#itemTo').value = i?.effective_to || '';
   $('#itemKey').disabled = !!i; $('#itemType').disabled = !!i?.builtin; openModal('#itemModal');
 }
@@ -283,7 +299,7 @@ async function saveItem(event) {
   event.preventDefault();
   try {
     const old = state.editingItem;
-    await saveReportItem({ id: old?.id || undefined, key: $('#itemKey').value.trim(), label: $('#itemLabel').value.trim(), section: $('#itemSection').value, input_type: old?.builtin ? old.input_type : $('#itemType').value, options: $('#itemOptions').value.split(',').map(x => x.trim()).filter(Boolean), sort_order: Number($('#itemOrder').value) || 999, active: $('#itemActive').value === 'true', effective_from: $('#itemFrom').value || todayISO(), effective_to: $('#itemTo').value || null, builtin: old?.builtin || false, manager_slot: old?.manager_slot || null, config: old?.config || { storage: 'dynamicItems' } });
+    await saveReportItem({ id: old?.id || undefined, key: $('#itemKey').value.trim(), label: $('#itemLabel').value.trim(), section: $('#itemSection').value, input_type: old?.builtin ? old.input_type : $('#itemType').value, options: $('#itemOptions').value.split(',').map(x => x.trim()).filter(Boolean), active: $('#itemActive').value === 'true', effective_from: $('#itemFrom').value || todayISO(), effective_to: $('#itemTo').value || null, builtin: old?.builtin || false, manager_slot: old?.manager_slot || null, config: old?.config || { storage: 'dynamicItems' } });
     closeModal('#itemModal'); flash('Report item saved.', 'success'); await ensureItemsLoaded(true);
   } catch (error) { flash(error.message || String(error), 'error', 7000); }
 }
