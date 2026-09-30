@@ -1,9 +1,9 @@
-import { isSupabaseConfigured } from '../config.js';
+import { DB_MODE } from '../data/index.js';
+import { signIn } from '../auth.js';
 import { qs, qsa } from '../core/dom.js';
 import { flash } from '../core/ui.js';
 import { modeBadge } from '../components/app-shell.js';
 
-const DB_MODE = isSupabaseConfigured() ? 'supabase' : 'demo';
 const titles = {
   ward: 'Ward Login',
   manager: 'Patrol Night Login',
@@ -16,45 +16,22 @@ const defaults = {
 };
 
 let role = null;
-let authPromise = null;
 
-// This renders immediately because it depends only on local modules/config.
 qs('#modeBadge').innerHTML = modeBadge(DB_MODE);
-
-function loadAuth() {
-  if (!authPromise) authPromise = import('../auth.js');
-  return authPromise;
-}
-
-// Warm the Supabase/auth module after first paint so the user does not pay
-// the full CDN/module cost when pressing Login.
-if (DB_MODE === 'supabase') {
-  setTimeout(() => { loadAuth().catch(() => {}); }, 0);
-}
-
 qsa('.login-option').forEach(button => {
   button.onclick = () => selectRole(button.dataset.role);
 });
-
-qs('#backBtn').onclick = () => {
-  role = null;
-  qs('#loginBox').classList.remove('show');
-  qsa('.login-option').forEach(button => {
-    button.disabled = false;
-    button.classList.remove('active');
-  });
-  qs('#loginIntro')?.classList.remove('hidden');
+qs('#backBtn').onclick = returnToRoleChooser;
+qs('#togglePassword').onclick = () => {
+  setPasswordVisibility(qs('#password').type === 'password');
 };
-
 qs('#loginForm').onsubmit = async event => {
   event.preventDefault();
   if (!role) return;
 
   const button = qs('#loginBtn');
   button.disabled = true;
-
   try {
-    const { signIn } = await loadAuth();
     await signIn(qs('#loginId').value, qs('#password').value, role);
     location.href = role === 'ward'
       ? './ward.html'
@@ -71,16 +48,37 @@ qs('#loginForm').onsubmit = async event => {
 function selectRole(nextRole) {
   role = nextRole;
   qs('#loginTitle').textContent = titles[nextRole];
+  qs('#loginRolePrompt').textContent = `Sign in to ${titles[nextRole]}.`;
   qs('#loginId').value = DB_MODE === 'demo' ? defaults[nextRole] : '';
   qs('#password').value = DB_MODE === 'demo' ? 'demo' : '';
+  setPasswordVisibility(false);
+
   qs('#demoHint').classList.toggle('hidden', DB_MODE !== 'demo');
-  if (DB_MODE === 'demo') {
-    qs('#demoHint').textContent = 'Demo mode is enabled. Password: demo.';
-  }
+  if (DB_MODE === 'demo') qs('#demoHint').textContent = 'Demo mode is enabled. Password: demo.';
+
   qs('#loginBox').classList.add('show');
-  qs('#loginIntro')?.classList.add('hidden');
+  qs('#loginIntro').classList.add('hidden');
   qsa('.login-option').forEach(button => {
     button.classList.toggle('active', button.dataset.role === nextRole);
   });
   setTimeout(() => qs('#loginId').focus(), 30);
+}
+
+function returnToRoleChooser() {
+  role = null;
+  qs('#loginBox').classList.remove('show');
+  qs('#loginIntro').classList.remove('hidden');
+  qs('#loginId').value = '';
+  qs('#password').value = '';
+  setPasswordVisibility(false);
+  qsa('.login-option').forEach(button => button.classList.remove('active'));
+}
+
+function setPasswordVisibility(visible) {
+  const input = qs('#password');
+  const button = qs('#togglePassword');
+  input.type = visible ? 'text' : 'password';
+  button.setAttribute('aria-pressed', String(visible));
+  button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  button.title = visible ? 'Hide password' : 'Show password';
 }
