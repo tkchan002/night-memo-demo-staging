@@ -23,6 +23,21 @@
 
     <main class="manager-main">
       <div id="managerStatus" class="manager-status no-print" hidden></div>
+      <div class="manager-history-layout">
+        <aside id="managerHistorySidebar" class="manager-history-sidebar no-print" hidden aria-labelledby="managerHistorySidebarTitle">
+          <div class="manager-history-sidebar-head">
+            <div>
+              <strong id="managerHistorySidebarTitle">History</strong>
+              <span>All Night Memos</span>
+            </div>
+            <button type="button" class="pill" id="closeManagerHistoryBtn">Close</button>
+          </div>
+          <div id="managerHistoryNightList" class="manager-history-night-list">
+            <div class="manager-history-empty">Loading memo archive…</div>
+          </div>
+        </aside>
+
+        <div id="managerPrimaryContent" class="manager-primary-content">
 
       <section id="nightOperationsPanel" class="night-operations-panel no-print" aria-labelledby="nightOperationsHeading">
         <div class="night-operations-head">
@@ -210,6 +225,24 @@
           </article>
         </section>
       </section>
+
+      <section id="managerArchiveViewer" class="manager-archive-viewer" hidden aria-labelledby="archiveMemoTitle">
+        <div class="manager-archive-head no-print">
+          <div>
+            <h2 id="archiveMemoTitle">Night Memo History</h2>
+            <div id="archiveMemoMeta" class="manager-archive-meta"></div>
+          </div>
+          <button type="button" class="pill" id="archiveUseAsDraftBtn" hidden>Use as Current Draft</button>
+        </div>
+        <div id="archiveRevisionList" class="manager-archive-revisions no-print"></div>
+        <iframe id="archiveMemoFrame" class="manager-archive-frame" title="Historical Night Memo"></iframe>
+        <details id="archiveRecoveryDetails" class="manager-recovery-details no-print" hidden>
+          <summary>Safety recovery checkpoints</summary>
+          <div id="archiveCheckpointList" class="manager-checkpoint-list"></div>
+        </details>
+      </section>
+        </div><!-- /#managerPrimaryContent -->
+      </div><!-- /.manager-history-layout -->
     </main>
   </div>
 
@@ -217,13 +250,6 @@
     <div class="manager-modal-card source-report-card">
       <div class="modal-head"><strong id="sourceReportTitle">Ward report</strong><button type="button" class="pill" data-close-modal="sourceReportModal">Close</button></div>
       <div id="sourceReportBody"></div>
-    </div>
-  </div>
-
-  <div class="manager-modal no-print" id="historyModal" hidden>
-    <div class="manager-modal-card history-card">
-      <div class="modal-head"><strong id="historyTitle">Night Memo History</strong><button type="button" class="pill" data-close-modal="historyModal">Close</button></div>
-      <div id="historyBody" class="history-body"></div>
     </div>
   </div>
 

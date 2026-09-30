@@ -16,9 +16,12 @@ export { getWardNightSnapshot, getManagerNightSnapshot, getManagerRecentSnapshot
 export { importGeneratedDemoBatch, listGeneratedDemoBatches, deleteGeneratedDemoBatch } from './repositories/demo-data-repository.js';
 export {
   getManagerMemo,
-  saveManagerMemo,
   saveManagerMemoRecovery,
   saveManagerMemoRevision,
   listManagerMemoRevisions,
   getManagerMemoRevision,
+  listManagerMemoArchive,
+  createManagerMemoCheckpoint,
+  listManagerMemoCheckpoints,
+  getManagerMemoCheckpoint,
 } from './repositories/manager-memo-repository.js';
