@@ -1,9 +1,9 @@
-import { DB_MODE } from '../data/index.js';
-import { signIn } from '../auth.js';
+import { isSupabaseConfigured } from '../config.js';
 import { qs, qsa } from '../core/dom.js';
 import { flash } from '../core/ui.js';
 import { modeBadge } from '../components/app-shell.js';
 
+const DB_MODE = isSupabaseConfigured() ? 'supabase' : 'demo';
 const titles = {
   ward: 'Ward Login',
   manager: 'Patrol Night Login',
@@ -14,10 +14,33 @@ const defaults = {
   manager: 'patrolnight@nightmemo.local',
   maintenance: 'nightmaintenance@nightmemo.local',
 };
+const destinations = {
+  ward: './ward.html',
+  manager: './manager.html',
+  maintenance: './maintenance.html',
+};
 
 let role = null;
+let authPromise = null;
 
 qs('#modeBadge').innerHTML = modeBadge(DB_MODE);
+
+function loadAuth() {
+  if (!authPromise) authPromise = import('../auth.js');
+  return authPromise;
+}
+
+// Let the page paint first, then prepare the auth/Supabase module in the
+// background so the Login click normally waits only for credential auth.
+if (DB_MODE === 'supabase') {
+  const warmAuth = () => { loadAuth().catch(() => {}); };
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(warmAuth, { timeout: 800 });
+  } else {
+    setTimeout(warmAuth, 0);
+  }
+}
+
 qsa('.login-option').forEach(button => {
   button.onclick = () => selectRole(button.dataset.role);
 });
@@ -29,19 +52,17 @@ qs('#loginForm').onsubmit = async event => {
   event.preventDefault();
   if (!role) return;
 
-  const button = qs('#loginBtn');
-  button.disabled = true;
+  let navigating = false;
+  setLoginBusy(true);
   try {
+    const { signIn } = await loadAuth();
     await signIn(qs('#loginId').value, qs('#password').value, role);
-    location.href = role === 'ward'
-      ? './ward.html'
-      : role === 'manager'
-        ? './manager.html'
-        : './maintenance.html';
+    navigating = true;
+    location.replace(destinations[role]);
   } catch (error) {
     flash(error.message || String(error), 'error', 6000);
   } finally {
-    button.disabled = false;
+    if (!navigating) setLoginBusy(false);
   }
 };
 
@@ -52,6 +73,7 @@ function selectRole(nextRole) {
   qs('#loginId').value = DB_MODE === 'demo' ? defaults[nextRole] : '';
   qs('#password').value = DB_MODE === 'demo' ? 'demo' : '';
   setPasswordVisibility(false);
+  setLoginBusy(false);
 
   qs('#demoHint').classList.toggle('hidden', DB_MODE !== 'demo');
   if (DB_MODE === 'demo') qs('#demoHint').textContent = 'Demo mode is enabled. Password: demo.';
@@ -71,6 +93,7 @@ function returnToRoleChooser() {
   qs('#loginId').value = '';
   qs('#password').value = '';
   setPasswordVisibility(false);
+  setLoginBusy(false);
   qsa('.login-option').forEach(button => button.classList.remove('active'));
 }
 
@@ -81,4 +104,16 @@ function setPasswordVisibility(visible) {
   button.setAttribute('aria-pressed', String(visible));
   button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
   button.title = visible ? 'Hide password' : 'Show password';
+}
+
+function setLoginBusy(busy) {
+  const button = qs('#loginBtn');
+  button.disabled = busy;
+  button.setAttribute('aria-busy', String(busy));
+  button.textContent = busy ? 'Signing in…' : 'Login';
+
+  qs('#loginId').readOnly = busy;
+  qs('#password').readOnly = busy;
+  qs('#backBtn').disabled = busy;
+  qs('#togglePassword').disabled = busy;
 }

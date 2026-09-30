@@ -125,3 +125,23 @@ body.login-page{
   .login-role-icon svg{width:46px;height:46px}
   .login-role-title{font-size:1.08rem}
 }
+
+/* Login submission state: immediate visual feedback while Supabase authenticates. */
+#loginBtn[aria-busy="true"]{
+  min-width:112px;
+  cursor:wait;
+}
+#loginBtn[aria-busy="true"]::before{
+  content:"";
+  display:inline-block;
+  width:.78em;
+  height:.78em;
+  margin-right:7px;
+  border:2px solid currentColor;
+  border-right-color:transparent;
+  border-radius:50%;
+  vertical-align:-.08em;
+  animation:login-spin .7s linear infinite;
+}
+@keyframes login-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#loginBtn[aria-busy="true"]::before{animation:none}}
