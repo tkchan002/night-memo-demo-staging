@@ -66,7 +66,7 @@ test('runtime sources contain no legacy ward_code, ward.code, or dynamic gender 
     'scripts/create-demo-users.mjs',
   ];
   const combined = runtimeFiles.map(file => `\n// ${file}\n${read(file)}`).join('\n');
-  assert.doesNotMatch(combined, /\bward_code\b|ward\??\.code|\bw\.code\b|mWardCode|value="dynamic"|empty_bed_gender_mode\s*===\s*['"]dynamic['"]/);
+  assert.doesNotMatch(combined, /\bward_code\b|ward\??\.code|\bw\.code\b|mWardCode|manager_section|mWardSection|value="dynamic"|empty_bed_gender_mode\s*===\s*['"]dynamic['"]/);
 });
 
 test('schema and live migration own the canonical Ward model', () => {

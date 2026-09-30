@@ -40,11 +40,11 @@ export async function getOperatingPeriods(wardId = null) {
   return data || [];
 }
 
-export async function getWardsForDate(date = defaultReportDate(), section = null) {
+export async function getWardsForDate(date = defaultReportDate()) {
   const [wards, periods] = await Promise.all([getAllWards(), getOperatingPeriods()]);
   return wards.filter(ward => {
     const open = periods.some(period => period.ward_id === ward.id && dateInRange(date, period.start_date, period.end_date));
-    return open && (!section || ward.manager_section === section);
+    return open;
   }).sort((a, b) => a.display_order - b.display_order || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
@@ -114,7 +114,6 @@ export async function createWard(config) {
       phone: config.phone,
       fax: config.fax,
       empty_bed_gender_mode: config.empty_bed_gender_mode || 'male',
-      manager_section: config.manager_section || 'Male',
       display_order: Math.max(0, ...state.wards.map(w => Number(w.display_order) || 0)) + 1,
       active: true,
       created_at: now,
@@ -132,7 +131,6 @@ export async function createWard(config) {
     phone: config.phone,
     fax: config.fax,
     empty_bed_gender_mode: config.empty_bed_gender_mode,
-    manager_section: config.manager_section,
     active: true,
   }).select().single();
   if (error) throw error;

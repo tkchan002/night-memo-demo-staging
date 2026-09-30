@@ -1,16 +1,16 @@
 const today = () => new Date().toISOString().slice(0, 10);
 
 export const DEMO_WARDS = [
-  {name:'C10', phone:'6397', fax:'3129', empty_bed_gender_mode:'male', manager_section:'Male', display_order:1, capacity:40},
-  {name:'E10', phone:'9358', fax:'2921', empty_bed_gender_mode:'male', manager_section:'Male', display_order:2, capacity:40},
-  {name:'G2',  phone:'8072', fax:'4846', empty_bed_gender_mode:'male', manager_section:'Male', display_order:3, capacity:36},
-  {name:'F10', phone:'8973', fax:'7432', empty_bed_gender_mode:'male', manager_section:'Male', display_order:4, capacity:40},
-  {name:'E6',  phone:'2372', fax:'9476', empty_bed_gender_mode:'male', manager_section:'Male', display_order:5, capacity:36},
-  {name:'C6',  phone:'5333', fax:'1137', empty_bed_gender_mode:'male', manager_section:'Male', display_order:6, capacity:40},
-  {name:'G10', phone:'5834', fax:'1153', empty_bed_gender_mode:'male', manager_section:'Male', display_order:7, capacity:40},
-  {name:'G11', phone:'6624', fax:'4882', empty_bed_gender_mode:'mixed', manager_section:'Male', display_order:8, capacity:40},
-  {name:'B10', phone:'4662', fax:'8510', empty_bed_gender_mode:'male', manager_section:'Male', display_order:9, capacity:40},
-  {name:'H6',  phone:'1075', fax:'2810', empty_bed_gender_mode:'mixed', manager_section:'Male', display_order:10, capacity:36},
+  {name:'C10', phone:'6397', fax:'3129', empty_bed_gender_mode:'male', display_order:1, capacity:40},
+  {name:'E10', phone:'9358', fax:'2921', empty_bed_gender_mode:'male', display_order:2, capacity:40},
+  {name:'G2',  phone:'8072', fax:'4846', empty_bed_gender_mode:'male', display_order:3, capacity:36},
+  {name:'F10', phone:'8973', fax:'7432', empty_bed_gender_mode:'male', display_order:4, capacity:40},
+  {name:'E6',  phone:'2372', fax:'9476', empty_bed_gender_mode:'male', display_order:5, capacity:36},
+  {name:'C6',  phone:'5333', fax:'1137', empty_bed_gender_mode:'male', display_order:6, capacity:40},
+  {name:'G10', phone:'5834', fax:'1153', empty_bed_gender_mode:'male', display_order:7, capacity:40},
+  {name:'G11', phone:'6624', fax:'4882', empty_bed_gender_mode:'mixed', display_order:8, capacity:40},
+  {name:'B10', phone:'4662', fax:'8510', empty_bed_gender_mode:'male', display_order:9, capacity:40},
+  {name:'H6',  phone:'1075', fax:'2810', empty_bed_gender_mode:'mixed', display_order:10, capacity:36},
 ];
 
 const range = (n=30) => Array.from({length:n+1}, (_,i)=>String(i));

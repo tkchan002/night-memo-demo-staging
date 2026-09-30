@@ -6,23 +6,22 @@ insert into public.form_versions(version,effective_from,status,schema_snapshot)
 values (1,'2026-01-01','published','{}'::jsonb)
 on conflict (version) do nothing;
 
-insert into public.wards(name,phone,fax,empty_bed_gender_mode,manager_section,display_order,active)
+insert into public.wards(name,phone,fax,empty_bed_gender_mode,display_order,active)
 values
- ('C10','6397','3129','male','Male',1,true),
- ('E10','9358','2921','male','Male',2,true),
- ('G2','8072','4846','male','Male',3,true),
- ('F10','8973','7432','male','Male',4,true),
- ('E6','2372','9476','male','Male',5,true),
- ('C6','5333','1137','male','Male',6,true),
- ('G10','5834','1153','male','Male',7,true),
- ('G11','6624','4882','mixed','Male',8,true),
- ('B10','4662','8510','male','Male',9,true),
- ('H6','1075','2810','mixed','Male',10,true)
+ ('C10','6397','3129','male',1,true),
+ ('E10','9358','2921','male',2,true),
+ ('G2','8072','4846','male',3,true),
+ ('F10','8973','7432','male',4,true),
+ ('E6','2372','9476','male',5,true),
+ ('C6','5333','1137','male',6,true),
+ ('G10','5834','1153','male',7,true),
+ ('G11','6624','4882','mixed',8,true),
+ ('B10','4662','8510','male',9,true),
+ ('H6','1075','2810','mixed',10,true)
 on conflict ((lower(name))) do update set
  phone=excluded.phone,
  fax=excluded.fax,
  empty_bed_gender_mode=excluded.empty_bed_gender_mode,
- manager_section=excluded.manager_section,
  display_order=excluded.display_order,
  active=true;
 

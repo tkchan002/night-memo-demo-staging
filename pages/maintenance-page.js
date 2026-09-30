@@ -140,7 +140,7 @@ function renderWardList() {
 
   const host = $('#wardRows');
   if (!orderedWards.length) {
-    host.innerHTML = '<tr><td colspan="7" class="muted">No wards configured.</td></tr>';
+    host.innerHTML = '<tr><td colspan="6" class="muted">No wards configured.</td></tr>';
     return;
   }
 
@@ -160,7 +160,6 @@ function renderWardList() {
       <td><div class="ward-list-subtext">Tel ${esc(w.phone || '—')} · Fax ${esc(w.fax || '—')}</div></td>
       <td><span class="ward-status"><span class="dot ${open ? 'active' : 'closed'}"></span>${esc(status)}</span></td>
       <td>${esc(emptyBedGenderLabel(w.empty_bed_gender_mode))}</td>
-      <td>${esc(w.manager_section || '—')}</td>
       <td>${moveButtons}</td>
       <td><div class="ward-row-actions"><button class="btn secondary small" data-edit-ward="${esc(w.id)}">Edit</button>${lifecycleButton}</div></td>
     </tr>`;
@@ -197,7 +196,7 @@ function openWardModal(w = null) {
   $('#wardModalTitle').textContent = w ? 'Edit Ward' : 'Add Ward';
   $('#editWardId').value = w?.id || ''; $('#mWardName').value = w?.name || '';
   $('#mWardPhone').value = w?.phone || ''; $('#mWardFax').value = w?.fax || ''; $('#mWardGender').value = w?.empty_bed_gender_mode || 'male';
-  $('#mWardSection').value = w?.manager_section || 'Male'; $('#mWardStart').value = todayISO();
+  $('#mWardStart').value = todayISO();
   $('#mWardEnd').value = ''; $('#mWardCapacity').value = '40'; $('#mWardNote').value = '';
   qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w)); openModal('#wardModal');
 }
@@ -206,10 +205,10 @@ async function saveWardFromModal(event) {
   try {
     const wardName = validateWardName($('#mWardName').value);
     if (state.editingWard) {
-      await updateWard(state.editingWard.id, { name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value });
+      await updateWard(state.editingWard.id, { name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value });
       flash('Ward updated.', 'success');
     } else {
-      await createWard({ name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, manager_section: $('#mWardSection').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
+      await createWard({ name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
       flash('Ward created. Create its login account in Accounts.', 'success', 6000);
     }
     closeModal('#wardModal'); await refreshWardConfiguration();

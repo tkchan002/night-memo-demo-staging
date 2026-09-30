@@ -15,7 +15,7 @@ export async function getCurrentAccess(authUserId = null) {
   if (!userId) return null;
   const { data, error } = await supabase
     .from('user_access')
-    .select('*, wards(id,name,phone,fax,empty_bed_gender_mode,manager_section,display_order,active)')
+    .select('*, wards(id,name,phone,fax,empty_bed_gender_mode,display_order,active)')
     .eq('auth_user_id', userId)
     .maybeSingle();
   if (error) throw error;
