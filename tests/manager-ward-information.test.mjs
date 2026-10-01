@@ -19,7 +19,7 @@ test('Manager Ward Information uses separate source sections', () => {
   assert.match(managerHtml, /Intubation/);
   assert.match(managerHtml, /Additional Report Items/);
 
-  assert.doesNotMatch(managerHtml, /Clinical \\/ General Information/);
+  assert.doesNotMatch(managerHtml, /Clinical \/ General Information/);
 });
 
 test('Manager Ward Information is backed by a dedicated domain model', () => {
@@ -35,7 +35,7 @@ test('Manager Ward Information is backed by a dedicated domain model', () => {
 });
 
 test('Manager page does not recreate Ward data as a combined narrative', () => {
-  assert.doesNotMatch(managerPage, /Clinical \\/ General Information/);
+  assert.doesNotMatch(managerPage, /Clinical \/ General Information/);
   assert.doesNotMatch(managerPage, /clinicalNotesHtml/);
   assert.doesNotMatch(managerPage, /additionalItemsHtml/);
 });
