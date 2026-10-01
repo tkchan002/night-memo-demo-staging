@@ -972,6 +972,15 @@ async function replaceCurrentDraftFromHistory(document, sourceSnapshot, label, c
   renderSubmissionMonitor();
   setStatus(`Historical ${label} loaded into the working draft. Press Save to create a new Draft version.`, 'info');
 }
+function renderWardInfoTable(columns, rows, { className = '' } = {}) {
+  if (!rows?.length) return '';
+  return `<div class="ward-info-table-wrap ${esc(className)}"><table class="ward-source-table"><thead><tr>${columns.map(column => `<th>${esc(column.label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${columns.map(column => `<td>${esc(row[column.key] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderWardInfoSection(title, content, { wide = false } = {}) {
+  return `<section class="ward-source-section${wide ? ' ward-info-wide' : ''}"><h2>${esc(title)}</h2>${content}</section>`;
+}
+
 function renderWardInformation() {
   const host = $('#wardInformationList');
   if (!host) return;
@@ -980,26 +989,68 @@ function renderWardInformation() {
     host.innerHTML = '<div class="manager-empty-state">No active wards found.</div>';
     return;
   }
+
   host.innerHTML = rows.map(row => {
     const wardName = row.ward?.name || 'Ward';
     const submitted = row.submittedAt ? formatDateTime(row.submittedAt, 'en-GB') : 'Not submitted in current cycle';
-    const clinical = row.clinical.length
-      ? `<ul class="ward-clinical-list">${row.clinical.map(item => `<li><span class="ward-info-kind">${esc(item.kind)}</span><span>${esc(item.text)}</span></li>`).join('')}</ul>`
-      : '<div class="ward-info-nil">No clinical/general information recorded in the current submission.</div>';
-    const additional = row.additional.length
-      ? `<table class="ward-additional-table"><tbody>${row.additional.map(item => `<tr><th>${esc(item.label)}</th><td>${esc(item.value || '—')}</td></tr>`).join('')}</tbody></table>`
-      : '<div class="ward-info-nil">No configured additional report items.</div>';
+    const noSubmission = !row.report;
+    const unavailable = '<div class="ward-info-nil">No current Ward submission.</div>';
+
+    const patientList = noSubmission
+      ? unavailable
+      : row.patientList.nil
+        ? '<div class="ward-info-nil">Nil Special</div>'
+        : renderWardInfoTable([
+          { key: 'bed', label: 'Bed' },
+          { key: 'name', label: 'Name' },
+          { key: 'diagnosisConditionProgress', label: 'Diagnosis / Condition / Progress' },
+        ], row.patientList.rows) || '<div class="ward-info-nil">No patient rows recorded.</div>';
+
+    const consultation = noSubmission
+      ? unavailable
+      : row.consultation.nil
+        ? '<div class="ward-info-nil">Nil Consultation</div>'
+        : renderWardInfoTable([
+          { key: 'bed', label: 'Bed' },
+          { key: 'name', label: 'Name' },
+          { key: 'pendingConsultation', label: 'Pending which subspecialty consultation' },
+        ], row.consultation.rows) || '<div class="ward-info-nil">No consultation rows recorded.</div>';
+
+    const intubation = noSubmission
+      ? unavailable
+      : row.intubation.nil
+        ? '<div class="ward-info-nil">Nil Intubation</div>'
+        : renderWardInfoTable([
+          { key: 'bed', label: 'Bed' },
+          { key: 'nameHospitalNumber', label: 'Name / Hospital No.' },
+          { key: 'diagnosis', label: 'Diagnosis' },
+          { key: 'reason', label: 'Reason' },
+          { key: 'urgency', label: 'Elective / Emergency' },
+          { key: 'byWhom', label: 'By Whom' },
+          { key: 'location', label: 'Location' },
+          { key: 'outcome', label: 'Patient Outcome' },
+        ], row.intubation.rows, { className: 'intubation-table-wrap' }) || '<div class="ward-info-nil">No intubation rows recorded.</div>';
+
+    const additional = noSubmission
+      ? unavailable
+      : row.additionalItems.length
+        ? `<table class="ward-additional-table"><tbody>${row.additionalItems.map(item => `<tr><th>${esc(item.label)}</th><td>${esc(item.value || '—')}</td></tr>`).join('')}</tbody></table>`
+        : '<div class="ward-info-nil">No configured Additional Report Items.</div>';
+
     return `<article class="ward-information-card${row.report ? '' : ' missing'}">
       <header class="ward-information-card-head">
         <div><strong>${esc(wardName)}</strong><span>${esc(submitted)}</span></div>
         ${row.report ? `<button type="button" class="pill ward-info-view-memo" data-ward-id="${esc(row.ward.id)}">View Ward Memo</button>` : ''}
       </header>
-      <div class="ward-information-columns">
-        <section><h2>Clinical / General Information</h2>${clinical}</section>
-        <section><h2>Additional Report Items</h2>${additional}</section>
+      <div class="ward-information-sections">
+        ${renderWardInfoSection('Patient List', patientList)}
+        ${renderWardInfoSection('Consultation', consultation)}
+        ${renderWardInfoSection('Intubation', intubation, { wide: true })}
+        ${renderWardInfoSection('Additional Report Items', additional, { wide: true })}
       </div>
     </article>`;
   }).join('');
+
   $$('.ward-info-view-memo', host).forEach(button => {
     button.onclick = () => openWardMemoPreview(button.dataset.wardId);
   });
