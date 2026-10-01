@@ -53,8 +53,6 @@ export function renderManagerMemoPrintHtml(document = {}, { printedAt = new Date
       <table class="manager-print-table center dense"><thead><tr>${INF_KEYS.map(([,label]) => `<th>${esc(label)}</th>`).join('')}</tr></thead><tbody>${rowsHtml(document.infectionRows, INF_KEYS)}</tbody></table>
     </section>
 
-    ${richSection('Clinical / General Notes', document.clinicalNotesHtml)}
-    ${richSection('Additional Report Items', document.additionalItemsHtml)}
     ${richSection('Early Bird', document.earlyBirdHtml)}
     ${richSection('Empty Bed', document.emptyBedHtml)}
 

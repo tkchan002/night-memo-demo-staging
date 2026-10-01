@@ -288,7 +288,7 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
   const flowPrefix=legacyFlowGenderPrefix(ward);
   const earlyBirds=(D.earlyBirds||[]).filter(e=>e.bed||e.dest).map(e=>escHtml((e.bed||'__')+'-->'+(e.dest||'____'))).join('<br>');
   const sigRank=D.sigRank||'RN',sigName=(D.sigName||'').trim(),sigAppt=(D.sigAppt||'').trim();
-  const wardName=ward?.display_name||ward?.code||'Ward';
+  const wardName=ward?.name||ward?.display_name||ward?.code||'Ward';
   const phone=ward?.phone||'—',fax=ward?.fax||'—';
   const logo=logoUrl?'<img class="logo" src="'+escHtml(logoUrl)+'">':'';
 

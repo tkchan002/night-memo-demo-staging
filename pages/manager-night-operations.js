@@ -11,6 +11,7 @@ const state = {
   reportingDate: reportingNightDate(),
   model: buildNightOperationsModel(),
   refreshing: false,
+  loaded: false,
 };
 
 bindControls();
@@ -22,6 +23,9 @@ function bindControls() {
   $('#refreshStatusBtn')?.addEventListener('click', () => refreshNightOperations({ quiet: true }).catch(() => {}));
   $('#printNightStaffBtn')?.addEventListener('click', printNightStaff);
   $('#printNightRunnerBtn')?.addEventListener('click', printNightRunners);
+  document.addEventListener('manager-primary-tab-change', event => {
+    if (event.detail?.tab === 'staffing') refreshNightOperations({ quiet: state.loaded }).catch(showError);
+  });
 }
 
 async function refreshNightOperations({ quiet = false } = {}) {
@@ -32,11 +36,14 @@ async function refreshNightOperations({ quiet = false } = {}) {
   if (!quiet) setLoading();
 
   try {
+    const currentDate = reportingNightDate();
+    if (currentDate !== state.reportingDate) state.reportingDate = currentDate;
     const [wards, snapshots] = await Promise.all([
       getWardsForDate(state.reportingDate),
       getCurrentNightRosterSnapshots(state.reportingDate),
     ]);
     state.model = buildNightOperationsModel({ wards, snapshots });
+    state.loaded = true;
     render();
   } finally {
     state.refreshing = false;
@@ -45,12 +52,10 @@ async function refreshNightOperations({ quiet = false } = {}) {
 }
 
 function setLoading() {
-  const wardSummary = $('#nightWardListSummary');
-  const runnerSummary = $('#nightRunnerListSummary');
-  if (wardSummary) wardSummary.textContent = 'Refreshing…';
-  if (runnerSummary) runnerSummary.textContent = 'Refreshing…';
-  if ($('#nightWardRosterGrid')) $('#nightWardRosterGrid').innerHTML = '<div class="night-ops-loading">Refreshing night staff…</div>';
-  if ($('#nightRunnerList')) $('#nightRunnerList').innerHTML = '<div class="night-ops-loading">Refreshing Night Runners…</div>';
+  if ($('#nightWardListSummary')) $('#nightWardListSummary').textContent = 'Refreshing…';
+  if ($('#nightRunnerListSummary')) $('#nightRunnerListSummary').textContent = 'Refreshing…';
+  if ($('#nightWardStaffRows')) $('#nightWardStaffRows').innerHTML = '<tr><td colspan="6">Refreshing night staff…</td></tr>';
+  if ($('#nightRunnerRows')) $('#nightRunnerRows').innerHTML = '<tr><td colspan="4">Refreshing Night Runners…</td></tr>';
 }
 
 function render() {
@@ -64,20 +69,23 @@ function render() {
   $('#printNightStaffBtn').disabled = model.wardCount === 0;
   $('#printNightRunnerBtn').disabled = false;
 
-  $('#nightWardRosterGrid').innerHTML = model.wardRosters.map(renderWardCard).join('') || '<div class="night-roster-empty">No active wards found.</div>';
-  $('#nightRunnerList').innerHTML = model.runners.length
-    ? `<table class="night-runner-table"><thead><tr><th>Ward</th><th>Rank</th><th>Name</th><th>Appointment Date</th></tr></thead><tbody>${model.runners.map(nurse => `<tr><td><b>${esc(nurse.ward?.name || '')}</b></td><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')}</tbody></table>`
-    : '<div class="night-roster-empty">No Night Runner recorded for this reporting night.</div>';
-}
+  const wardRows = [];
+  for (const row of model.wardRosters) {
+    const wardName = row.ward?.name || '';
+    const updated = row.updatedAt ? formatDateTime(row.updatedAt, 'en-GB') : '—';
+    if (!row.nurses?.length) {
+      wardRows.push(`<tr class="night-staffing-empty-ward"><td><b>${esc(wardName)}</b></td><td colspan="4">No night staff saved for this shift.</td><td>${esc(updated)}</td></tr>`);
+      continue;
+    }
+    row.nurses.forEach((nurse, index) => {
+      wardRows.push(`<tr><td>${index === 0 ? `<b>${esc(wardName)}</b>` : ''}</td><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td><td>${nurse.runner ? '<span class="runner-yes">Yes</span>' : '—'}</td><td>${index === 0 ? esc(updated) : ''}</td></tr>`);
+    });
+  }
+  $('#nightWardStaffRows').innerHTML = wardRows.join('') || '<tr><td colspan="6">No active wards found.</td></tr>';
 
-function renderWardCard(row) {
-  const nurses = row.nurses || [];
-  const updated = row.updatedAt ? `Updated ${formatDateTime(row.updatedAt, 'en-GB')}` : 'No ward staff list saved this shift';
-  return `<article class="night-ward-card">
-    <div class="night-ward-card-head"><span class="night-ward-code">${esc(row.ward?.name || '')}</span><span class="night-ward-count">${nurses.length} staff</span></div>
-    ${nurses.length ? `<table class="night-ward-table"><thead><tr><th>Rank</th><th>Name</th><th>Appointment Date</th></tr></thead><tbody>${nurses.map(nurse => `<tr><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')}</tbody></table>` : '<div class="night-roster-empty">No night staff saved for this shift.</div>'}
-    <div class="night-roster-updated">${esc(updated)}</div>
-  </article>`;
+  $('#nightRunnerRows').innerHTML = model.runners.length
+    ? model.runners.map(nurse => `<tr><td><b>${esc(nurse.ward?.name || '')}</b></td><td>${esc(nurse.role)}</td><td>${esc(nurse.name)}</td><td>${esc(nurse.appointmentDate)}</td></tr>`).join('')
+    : '<tr><td colspan="4">No Night Runner recorded for this reporting night.</td></tr>';
 }
 
 function displayReportingDate(value) {
@@ -86,33 +94,18 @@ function displayReportingDate(value) {
 }
 
 function printNightStaff() {
-  showRosterPrint(renderNightStaffPrintHtml({
-    reportingDate: state.reportingDate,
-    wardRosters: state.model.wardRosters,
-  }), 'Night Staff List');
+  showRosterPrint(renderNightStaffPrintHtml({ reportingDate: state.reportingDate, wardRosters: state.model.wardRosters }), 'Night Staff List');
 }
 
 function printNightRunners() {
-  showRosterPrint(renderNightRunnerPrintHtml({
-    reportingDate: state.reportingDate,
-    runners: state.model.runners,
-  }), 'Night Runner List');
+  showRosterPrint(renderNightRunnerPrintHtml({ reportingDate: state.reportingDate, runners: state.model.runners }), 'Night Runner List');
 }
 
 function showRosterPrint(html, title) {
   const modal = $('#printPreviewModal');
   const frame = $('#printPreviewFrame');
   const heading = $('#printPreviewTitle');
-  if (!modal || !frame || !heading) {
-    const win = window.open('', '_blank');
-    if (!win) return;
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-    win.addEventListener('load', () => win.print(), { once: true });
-    return;
-  }
-
+  if (!modal || !frame || !heading) return;
   heading.textContent = title;
   modal.hidden = false;
   frame.onload = () => {
@@ -126,10 +119,10 @@ function showRosterPrint(html, title) {
 }
 
 function showError(error) {
-  console.error('Night Operations failed:', error);
-  const message = esc(error?.message || error || 'Unable to load Night Operations.');
+  console.error('Night Staffing failed:', error);
+  const message = esc(error?.message || error || 'Unable to load Night Staffing.');
   if ($('#nightWardListSummary')) $('#nightWardListSummary').textContent = 'Unavailable';
   if ($('#nightRunnerListSummary')) $('#nightRunnerListSummary').textContent = 'Unavailable';
-  if ($('#nightWardRosterGrid')) $('#nightWardRosterGrid').innerHTML = `<div class="night-ops-error">${message}</div>`;
-  if ($('#nightRunnerList')) $('#nightRunnerList').innerHTML = `<div class="night-ops-error">${message}</div>`;
+  if ($('#nightWardStaffRows')) $('#nightWardStaffRows').innerHTML = `<tr><td colspan="6">${message}</td></tr>`;
+  if ($('#nightRunnerRows')) $('#nightRunnerRows').innerHTML = `<tr><td colspan="4">${message}</td></tr>`;
 }

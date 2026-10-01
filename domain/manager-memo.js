@@ -1,10 +1,6 @@
 import { addDaysISO, todayISO, toDisplayDate, REPORT_TIME_ZONE } from '../core/dates.js';
-import { deviceCount, formatDynamic, normalizeDevice, normalizeReportPayload } from './report-model.js';
+import { deviceCount, normalizeDevice, normalizeReportPayload } from './report-model.js';
 import { reportSubmittedAt } from './report-session.js';
-
-const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
-  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-}[ch]));
 
 function hktHour(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -147,25 +143,6 @@ function infectionRow(entry) {
   };
 }
 
-function clinicalLines(bundle = []) {
-  const lines = [];
-  for (const { ward, report } of bundle) {
-    if (!report) continue;
-    const D = normalizeReportPayload(report.payload);
-    const wardName = ward?.name || 'Ward';
-    if (!D.nilSpecial) for (const row of D.patients || []) {
-      if (row.some(Boolean)) lines.push(`${wardName}: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
-    }
-    if (!D.nilConsultation) for (const row of D.consultations || []) {
-      if (row.some(Boolean)) lines.push(`${wardName} consultation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2]].filter(Boolean).join(' · ')}`);
-    }
-    if (!D.nilIntubation) for (const row of D.intubations || []) {
-      if (row.some(Boolean)) lines.push(`${wardName} intubation: ${[row[0] && `Bed ${row[0]}`, row[1], row[2] && `Dx ${row[2]}`, row[3] && `Reason ${row[3]}`].filter(Boolean).join(' · ')}`);
-    }
-  }
-  return lines;
-}
-
 function earlyBirdLines(bundle = []) {
   const lines = [];
   for (const { ward, report } of bundle) {
@@ -183,30 +160,15 @@ function emptyBedLines(bundle = []) {
     .map(entry => `${entry.ward?.name || 'Ward'}: ${formatManagerEmptyBeds(entry.ward, entry.report, entry.capacity)}`);
 }
 
-function additionalItemLines(bundle = [], items = []) {
-  const configured = [...(items || [])].filter(item => !item.builtin).sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
-  if (!configured.length) return [];
-  const lines = [];
-  for (const { ward, report } of bundle) {
-    if (!report) continue;
-    const D = normalizeReportPayload(report.payload);
-    const values = configured.map(item => {
-      const value = formatDynamic(D.dynamicItems?.[item.key]);
-      return value && value !== '—' && value !== 'Nil' ? `${item.label}: ${value}` : '';
-    }).filter(Boolean);
-    if (values.length) lines.push(`${ward?.name || 'Ward'}: ${values.join('; ')}`);
-  }
-  return lines;
-}
-
-const linesToHtml = lines => lines.length ? lines.map(line => `<div>${esc(line)}</div>`).join('') : '<div><br></div>';
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const linesToHtml = lines => lines.length ? lines.map(line => `<div>${escapeHtml(line)}</div>`).join('') : '<div><br></div>';
 
 export const MANAGER_MEMO_FROM_PREFIX = 'N.O./APN,';
 export const MANAGER_MEMO_TO = 'DOM/Medical (QEH)';
 
 export function buildManagerMemoDocument({ bundle = [], items = [], reportingDate = reportingNightDate() } = {}) {
   return {
-    version: 2,
+    version: 3,
     title: 'Night Memo',
     header: {
       fromName: '',
@@ -216,8 +178,6 @@ export function buildManagerMemoDocument({ bundle = [], items = [], reportingDat
     },
     mainTableRows: bundle.map(mainRow),
     infectionRows: bundle.map(infectionRow),
-    clinicalNotesHtml: linesToHtml(clinicalLines(bundle)),
-    additionalItemsHtml: linesToHtml(additionalItemLines(bundle, items)),
     earlyBirdHtml: linesToHtml(earlyBirdLines(bundle)),
     emptyBedHtml: linesToHtml(emptyBedLines(bundle)),
     ct: {
@@ -241,8 +201,6 @@ export function regenerateWardDerivedSections(document, { bundle = [], items = [
     ...document,
     mainTableRows: generated.mainTableRows,
     infectionRows: generated.infectionRows,
-    clinicalNotesHtml: generated.clinicalNotesHtml,
-    additionalItemsHtml: generated.additionalItemsHtml,
     earlyBirdHtml: generated.earlyBirdHtml,
     emptyBedHtml: generated.emptyBedHtml,
   };

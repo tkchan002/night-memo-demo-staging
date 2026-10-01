@@ -2,7 +2,7 @@ import { requireRole, signOut } from '../auth.js';
 import { qs, qsa, esc } from '../core/dom.js';
 import { formatDateTime, toDisplayDate } from '../core/dates.js';
 import { setAppHeader } from '../components/app-shell.js';
-import { renderFullReport } from '../components/report-view.js';
+import { initManagerTabs } from '../components/manager-tabs.js';
 import {
   DB_MODE,
   getManagerMemo,
@@ -26,6 +26,7 @@ import {
 } from '../domain/manager-memo.js';
 import { loadManagerCurrent } from '../services/report-service.js';
 import { renderManagerMemoPrintHtml } from '../manager-memo-print.js';
+import { buildManagerWardInformation } from '../domain/manager-ward-information.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -64,13 +65,22 @@ const state = {
   lastOfficialType: null,
   editGeneration: 0,
   savedGeneration: 0,
+  activeTab: 'submission',
+  historyReturnTab: 'submission',
+  wardPreviewContext: null,
 };
 
 let persistenceTail = Promise.resolve();
+let managerTabs = null;
+let wardPrintModulePromise = null;
 
 bootstrap().catch(showFatal);
 
 async function bootstrap() {
+  managerTabs = initManagerTabs({
+    initialTab: 'submission',
+    onChange: tab => { state.activeTab = tab; },
+  });
   bindStaticControls();
   setStatus('Loading Manager workspace…', 'info');
   state.access = await requireRole('manager');
@@ -78,7 +88,7 @@ async function bootstrap() {
 
   setAppHeader({
     title: 'Patrol Night',
-    subtitle: 'Ward submission status and Night Memo editor',
+    subtitle: 'Night operations and Night Memo workspace',
     access: state.access,
     mode: DB_MODE,
   });
@@ -87,13 +97,16 @@ async function bootstrap() {
   await refreshWardStatus({ initial: true });
   await loadWorkspace();
   renderSubmissionMonitor();
+  renderWardInformation();
   renderWorkspace();
   clearStatus();
 }
 
 function bindStaticControls() {
   $('#logoutBtn').onclick = signOut;
+  $('#managerGlobalHistoryBtn').onclick = enterHistoryMode;
   $('#refreshStatusBtn').onclick = () => refreshWardStatus();
+  $('#refreshWardInformationBtn').onclick = () => refreshWardStatus();
   $('#regenerateBtn').onclick = regenerateFromWardData;
 
   $('#continueDraftBtn').onclick = openExistingDraft;
@@ -108,6 +121,7 @@ function bindStaticControls() {
 
   $('#closeManagerHistoryBtn').onclick = exitHistoryMode;
   $('#archiveUseAsDraftBtn').onclick = restoreSelectedArchiveAsDraft;
+  $('#printWardMemoBtn').onclick = printOpenWardMemo;
 
   $('#managerHistoryNightList').addEventListener('click', async event => {
     const button = event.target.closest('[data-archive-date]');
@@ -175,6 +189,7 @@ async function refreshWardStatus({ initial = false } = {}) {
     state.windowMinutes = current.windowMinutes || SUBMISSION_WINDOW_MINUTES;
     state.refreshedAt = new Date();
     renderSubmissionMonitor();
+    renderWardInformation();
     if (!initial) clearStatus();
   } catch (error) {
     setStatus(`Unable to refresh ward status: ${error.message || error}`, 'error');
@@ -239,11 +254,11 @@ function renderSubmissionMonitor() {
       <td>${esc(status.label)}</td>
       <td>${esc(submittedAt)}</td>
       <td>${esc(sourceLabel)}</td>
-      <td>${report ? `<button type="button" class="pill source-view-btn" data-ward-id="${esc(ward.id)}">View source</button>` : ''}</td>
+      <td>${report ? `<button type="button" class="pill ward-memo-view-btn" data-ward-id="${esc(ward.id)}">View Memo</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5">No active wards found.</td></tr>';
-  $$('.source-view-btn', body).forEach(button => {
-    button.onclick = () => openSourceReport(button.dataset.wardId);
+  $$('.ward-memo-view-btn', body).forEach(button => {
+    button.onclick = () => openWardMemoPreview(button.dataset.wardId);
   });
 }
 
@@ -370,8 +385,6 @@ function renderEditor({ keepDirty = false } = {}) {
     $('#memoCallTeam').value = doc.header?.callTeam || '';
     renderEditableRows($('#memoMainRows'), doc.mainTableRows || [], MAIN_KEYS);
     renderEditableRows($('#memoInfectionRows'), doc.infectionRows || [], INF_KEYS);
-    $('#memoClinicalNotes').innerHTML = sanitizeRichHtml(doc.clinicalNotesHtml || '<div><br></div>');
-    $('#memoAdditionalItems').innerHTML = sanitizeRichHtml(doc.additionalItemsHtml || '<div><br></div>');
     $('#memoEarlyBird').innerHTML = sanitizeRichHtml(doc.earlyBirdHtml || '<div><br></div>');
     $('#memoEmptyBed').innerHTML = sanitizeRichHtml(doc.emptyBedHtml || '<div><br></div>');
     $('#ctTotal').value = doc.ct?.total || '';
@@ -408,9 +421,10 @@ function readRows(host, existingRows, keys) {
 
 function serializeDocument() {
   const current = state.memo?.document || {};
+  const { clinicalNotesHtml: _legacyClinical, additionalItemsHtml: _legacyAdditional, ...official } = current;
   return {
-    ...current,
-    version: 2,
+    ...official,
+    version: 3,
     title: $('#memoTitle').textContent.trim() || 'Night Memo',
     header: {
       fromName: $('#memoFromName').value,
@@ -420,8 +434,6 @@ function serializeDocument() {
     },
     mainTableRows: readRows($('#memoMainRows'), current.mainTableRows, MAIN_KEYS),
     infectionRows: readRows($('#memoInfectionRows'), current.infectionRows, INF_KEYS),
-    clinicalNotesHtml: sanitizeRichHtml($('#memoClinicalNotes').innerHTML),
-    additionalItemsHtml: sanitizeRichHtml($('#memoAdditionalItems').innerHTML),
     earlyBirdHtml: sanitizeRichHtml($('#memoEarlyBird').innerHTML),
     emptyBedHtml: sanitizeRichHtml($('#memoEmptyBed').innerHTML),
     ct: {
@@ -728,15 +740,13 @@ async function enterHistoryMode() {
   }
 
   state.historyReturnMode = state.editorOpen ? 'editor' : 'workspace';
+  state.historyReturnTab = state.activeTab;
   state.historyMode = true;
   setEditingEnabled(false);
+  managerTabs?.setEnabled(false);
   $('#managerHistorySidebar').hidden = false;
   $('#managerArchiveViewer').hidden = false;
-  $('#nightOperationsPanel').hidden = true;
-  const submissionPanel = document.querySelector('.submission-panel');
-  if (submissionPanel) submissionPanel.hidden = true;
-  $('#memoWorkspacePanel').hidden = true;
-  $('#editorArea').hidden = true;
+  $('#managerTabsShell').hidden = true;
   renderMemoState();
 
   try {
@@ -757,22 +767,21 @@ function exitHistoryMode() {
   state.historyMode = false;
   $('#managerHistorySidebar').hidden = true;
   $('#managerArchiveViewer').hidden = true;
-  $('#nightOperationsPanel').hidden = false;
-  const submissionPanel = document.querySelector('.submission-panel');
-  if (submissionPanel) submissionPanel.hidden = false;
+  $('#managerTabsShell').hidden = false;
+  managerTabs?.setEnabled(true);
+  managerTabs?.select(state.historyReturnTab || 'submission', { emit: true });
 
   if (state.historyReturnMode === 'editor' && state.memo) {
     state.editorOpen = true;
     $('#memoWorkspacePanel').hidden = true;
     $('#editorArea').hidden = false;
     if (!state.conflicted && !state.boundaryExpired && !state.officialSaving) setEditingEnabled(true);
-    $('#historyBtn').focus();
-  } else {
+  } else if (state.activeTab === 'memo') {
     state.editorOpen = false;
     $('#editorArea').hidden = true;
     $('#memoWorkspacePanel').hidden = false;
-    $('#workspaceHistoryBtn').focus();
   }
+  document.querySelector(`[data-manager-tab="${state.activeTab}"]`)?.focus();
   renderMemoState();
 }
 
@@ -963,15 +972,71 @@ async function replaceCurrentDraftFromHistory(document, sourceSnapshot, label, c
   renderSubmissionMonitor();
   setStatus(`Historical ${label} loaded into the working draft. Press Save to create a new Draft version.`, 'info');
 }
-async function openSourceReport(wardId) {
+function renderWardInformation() {
+  const host = $('#wardInformationList');
+  if (!host) return;
+  const rows = buildManagerWardInformation({ wards: state.allWards, bundle: state.bundle, items: state.items });
+  if (!rows.length) {
+    host.innerHTML = '<div class="manager-empty-state">No active wards found.</div>';
+    return;
+  }
+  host.innerHTML = rows.map(row => {
+    const wardName = row.ward?.name || 'Ward';
+    const submitted = row.submittedAt ? formatDateTime(row.submittedAt, 'en-GB') : 'Not submitted in current cycle';
+    const clinical = row.clinical.length
+      ? `<ul class="ward-clinical-list">${row.clinical.map(item => `<li><span class="ward-info-kind">${esc(item.kind)}</span><span>${esc(item.text)}</span></li>`).join('')}</ul>`
+      : '<div class="ward-info-nil">No clinical/general information recorded in the current submission.</div>';
+    const additional = row.additional.length
+      ? `<table class="ward-additional-table"><tbody>${row.additional.map(item => `<tr><th>${esc(item.label)}</th><td>${esc(item.value || '—')}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="ward-info-nil">No configured additional report items.</div>';
+    return `<article class="ward-information-card${row.report ? '' : ' missing'}">
+      <header class="ward-information-card-head">
+        <div><strong>${esc(wardName)}</strong><span>${esc(submitted)}</span></div>
+        ${row.report ? `<button type="button" class="pill ward-info-view-memo" data-ward-id="${esc(row.ward.id)}">View Ward Memo</button>` : ''}
+      </header>
+      <div class="ward-information-columns">
+        <section><h2>Clinical / General Information</h2>${clinical}</section>
+        <section><h2>Additional Report Items</h2>${additional}</section>
+      </div>
+    </article>`;
+  }).join('');
+  $$('.ward-info-view-memo', host).forEach(button => {
+    button.onclick = () => openWardMemoPreview(button.dataset.wardId);
+  });
+}
+
+async function getWardPrintModule() {
+  if (!wardPrintModulePromise) wardPrintModulePromise = import('../ward-print.js');
+  return wardPrintModulePromise;
+}
+
+async function openWardMemoPreview(wardId) {
   const entry = state.bundle.find(item => item.ward?.id === wardId);
   if (!entry?.report) return;
   const items = entry.report.report_item_snapshot?.length
     ? entry.report.report_item_snapshot.map(item => ({ ...item, __historical: true }))
     : state.items;
-  $('#sourceReportTitle').textContent = `${entry.ward.name} submitted ward memo`;
-  $('#sourceReportBody').innerHTML = renderFullReport({ ward: entry.ward, report: entry.report, capacity: entry.capacity, items });
-  $('#sourceReportModal').hidden = false;
+  const mod = await getWardPrintModule();
+  const context = {
+    ward: entry.ward,
+    report: entry.report,
+    capacity: entry.report.bed_capacity_snapshot ?? entry.capacity,
+    items,
+    settings: mod.loadWardPrintSettings(),
+    logoUrl: new URL('../assets/heart-logo.png', import.meta.url).href,
+  };
+  state.wardPreviewContext = context;
+  const submitted = reportSubmittedAt(entry.report);
+  $('#wardMemoPreviewTitle').textContent = `${entry.ward.name} Ward Night Memo`;
+  $('#wardMemoPreviewMeta').textContent = submitted ? `Submitted ${formatDateTime(submitted, 'en-GB')}` : 'Submitted Ward memo';
+  $('#wardMemoPreviewModal').hidden = false;
+  await mod.writeWardMemoToIframe($('#wardMemoPreviewFrame'), context);
+}
+
+async function printOpenWardMemo() {
+  if (!state.wardPreviewContext) return;
+  const mod = await getWardPrintModule();
+  await mod.printWardMemo(state.wardPreviewContext);
 }
 
 function setStatus(message, type = 'info') {
