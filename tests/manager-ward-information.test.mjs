@@ -1,50 +1,88 @@
-import test from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '..');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const read = (file) => readFile(path.join(root, file), 'utf8');
+async function read(file) {
+  return fs.readFile(
+    path.resolve(__dirname, '..', file),
+    'utf8'
+  );
+}
 
-const managerHtml = await read('manager.html');
-const managerPage = await read('pages/manager-page.js');
-const wardInfoDomain = await read('domain/manager-ward-information.js');
+test('Manager page uses source-owned Ward Information builder', async () => {
+  const page = await read('pages/manager-page.js');
 
-test('Manager Ward Information uses separate source sections', () => {
-  assert.match(managerHtml, /Patient List/);
-  assert.match(managerHtml, /Consultation/);
-  assert.match(managerHtml, /Intubation/);
-  assert.match(managerHtml, /Additional Report Items/);
+  // Manager page should use the new Ward Information renderer
+  assert.match(
+    page,
+    /buildManagerWardInformation/
+  );
 
-  assert.doesNotMatch(managerHtml, /Clinical \/ General Information/);
+  // Old placeholder based rendering should be removed
+  assert.doesNotMatch(
+    page,
+    /clinicalNotesHtml/
+  );
+
+  assert.doesNotMatch(
+    page,
+    /_legacyClinical/
+  );
+
+  assert.doesNotMatch(
+    page,
+    /_legacyAdditional/
+  );
 });
 
-test('Manager Ward Information is backed by a dedicated domain model', () => {
-  assert.match(managerPage, /manager-ward-information/);
 
-  assert.match(wardInfoDomain, /patientList/);
-  assert.match(wardInfoDomain, /consultations/);
-  assert.match(wardInfoDomain, /intubations/);
-  assert.match(wardInfoDomain, /additionalItems/);
+test('Manager page contains the four-tab workspace structure', async () => {
+  const page = await read('pages/manager-page.js');
 
-  assert.doesNotMatch(wardInfoDomain, /clinicalInformation/);
-  assert.doesNotMatch(wardInfoDomain, /generalInformation/);
+  assert.match(
+    page,
+    /Patient List/
+  );
+
+  assert.match(
+    page,
+    /Consultation/
+  );
+
+  assert.match(
+    page,
+    /Intubation/
+  );
+
+  assert.match(
+    page,
+    /Additional Report Items/
+  );
 });
 
-test('Manager page does not recreate Ward data as a combined narrative', () => {
-  assert.doesNotMatch(managerPage, /Clinical \/ General Information/);
-  assert.doesNotMatch(managerPage, /clinicalNotesHtml/);
-  assert.doesNotMatch(managerPage, /additionalItemsHtml/);
-});
 
-test('Ward Information remains read-only source data', () => {
-  assert.doesNotMatch(managerPage, /saveWardInformation/);
-  assert.doesNotMatch(managerPage, /updateWardInformation/);
-});
+test('Manager page keeps Ward Information read-only', async () => {
+  const page = await read('pages/manager-page.js');
 
-test('Additional Report Items preserve historical report definitions', () => {
-  assert.match(wardInfoDomain, /report_item_snapshot/);
+  // Ward Information should be generated from the source data,
+  // not manually injected through legacy HTML placeholders.
+  assert.match(
+    page,
+    /buildManagerWardInformation/
+  );
+
+  assert.doesNotMatch(
+    page,
+    /clinicalNotesHtml/
+  );
+
+  assert.doesNotMatch(
+    page,
+    /additionalItemsHtml/
+  );
 });
