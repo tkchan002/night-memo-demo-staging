@@ -68,3 +68,70 @@ export function makeEmptyBedReporting({ male = null, female = null, single = nul
     singleDoubleEnabled,
   });
 }
+
+
+/** V2: One ordered manual-entry list. Never reconciled with total empty beds. */
+export const EMPTY_BED_ENTRY_DESIGNATIONS = Object.freeze(['M', 'F', 'S', 'D']);
+
+export function parseEmptyBedLabel(label) {
+  const match = String(label ?? '').trim().toUpperCase().match(/^([1-9]\d*)([MFSD])$/);
+  if (!match || !Number.isSafeInteger(Number(match[1]))) return null;
+  return { quantity: Number(match[1]), designation: match[2] };
+}
+
+export function normalizeEmptyBedEntries(entries) {
+  if (!Array.isArray(entries)) return null;
+  return entries.map(value => ({
+    quantity: value?.quantity ?? null,
+    designation: String(value?.designation ?? '').trim().toUpperCase(),
+    remark: String(value?.remark ?? '').trim(),
+  }));
+}
+
+export function validateEmptyBedEntries(entries) {
+  if (entries === undefined || entries === null) return [];
+  if (!Array.isArray(entries)) return ['Empty Bed entries must be a list.'];
+  const errors = [];
+  entries.forEach((entry, index) => {
+    const { quantity, designation, remark } = entry || {};
+    if (quantity == null && !designation && !remark) return;
+    const n = typeof quantity === 'number' ? quantity : Number(String(quantity ?? '').trim());
+    if (!Number.isSafeInteger(n) || n < 1) errors.push(`Empty Bed entry ${index + 1} requires a positive whole number.`);
+    if (!EMPTY_BED_ENTRY_DESIGNATIONS.includes(String(designation ?? '').trim().toUpperCase())) {
+      errors.push(`Empty Bed entry ${index + 1} requires M, F, S or D.`);
+    }
+  });
+  return errors;
+}
+
+export function formatEmptyBedEntries(entries) {
+  if (!Array.isArray(entries)) return '';
+  return entries.filter(entry => entry && Number.isSafeInteger(Number(entry.quantity)) && Number(entry.quantity) > 0
+    && EMPTY_BED_ENTRY_DESIGNATIONS.includes(String(entry.designation || '').toUpperCase()))
+    .map(entry => `${Number(entry.quantity)}${String(entry.designation).toUpperCase()}${String(entry.remark || '').trim() ? ` (${String(entry.remark).trim()})` : ''}`)
+    .join(', ');
+}
+
+/**
+ * Legacy M/F/S/D quantities and optional bed/location notes were independent.
+ * We do not assume they refer to the same beds or subtract one from another.
+ * Keep all legacy information; unclassified legacy notes must be assigned a
+ * designation by the nurse before re-saving the report in the new format.
+ */
+export function legacyEmptyBedEntries(emptyBeds, ward = {}) {
+  if (Array.isArray(emptyBeds?.entries)) return normalizeEmptyBedEntries(emptyBeds.entries);
+  const previous = normalizeEmptyBedReporting(emptyBeds?.reported);
+  const result = [];
+  if (previous) {
+    for (const [kind, value] of [['M', previous.male], ['F', previous.female], ['S', previous.single], ['D', previous.double]]) {
+      if (Number.isSafeInteger(value) && value > 0) result.push({ quantity: value, designation: kind, remark: '' });
+    }
+  }
+  for (const detail of Array.isArray(emptyBeds?.details) ? emptyBeds.details : []) {
+    const kind = String(detail?.gender || (ward?.empty_bed_gender_mode === 'male' ? 'M' : ward?.empty_bed_gender_mode === 'female' ? 'F' : '')).toUpperCase();
+    const parts = [String(detail?.location || '').trim(), String(detail?.remark || '').trim()].filter(Boolean);
+    if (!parts.length && !EMPTY_BED_ENTRY_DESIGNATIONS.includes(kind)) continue;
+    result.push({ quantity: 1, designation: EMPTY_BED_ENTRY_DESIGNATIONS.includes(kind) ? kind : '', remark: parts.join(' - ') });
+  }
+  return result;
+}

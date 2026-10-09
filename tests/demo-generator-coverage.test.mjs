@@ -71,7 +71,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
   assert.equal(c.manual_empty_bed_mf, true);
   assert.equal(c.manual_empty_bed_sd, true);
   assert.equal(bundle.meta.sd_reporting_wards, 1);
-  assert.equal(bundle.generator_version, 3);
+  assert.equal(bundle.generator_version, 4);
   assert.equal(c.patient_list, true);
   assert.equal(c.patient_nil_state, true);
   assert.equal(c.consultation, true);
@@ -82,7 +82,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
   assert.equal(c.night_runner, true);
   assert.equal(c.free_text_nurse, true);
   assert.equal(c.ward_staff_nurse, true);
-  assert.equal(c.mixed_empty_bed_detail, true);
+  assert.equal(c.empty_bed_remarks, true);
   assert.equal(c.signature, true);
   assert.equal(c.staffing_counts, true);
   assert.equal(c.bed_or_count_beds_mode, true);
@@ -98,18 +98,14 @@ test('comprehensive batch covers every Ward entry structure and effective config
     const cap = capacities[wards.find(w => w.name === report.ward_name).id];
     assert.ok(Number(report.payload.totalPatientM) >= 0 && Number(report.payload.totalPatientM) <= cap);
     assert.equal(Number(report.payload.emptyBeds.count), cap - Number(report.payload.totalPatientM));
-    const manual = report.payload.emptyBeds.reported;
-    assert.ok(manual, 'generated report must contain independent manual M/F figures');
-    assert.ok(Number.isSafeInteger(manual.male));
-    assert.ok(Number.isSafeInteger(manual.female));
+    const entries = report.payload.emptyBeds.entries;
+    assert.ok(Array.isArray(entries), 'generated report must use the unified manual-entry format');
+    assert.ok(entries.every(entry => Number.isSafeInteger(entry.quantity) && entry.quantity > 0));
     if (report.ward_name === 'B2') {
-      assert.equal(manual.singleDoubleEnabled, true);
-      assert.ok(Number.isSafeInteger(manual.single));
-      assert.ok(Number.isSafeInteger(manual.double));
+      assert.ok(entries.some(entry => entry.designation === 'S'));
+      assert.ok(entries.some(entry => entry.designation === 'D'));
     } else {
-      assert.equal(manual.singleDoubleEnabled, false);
-      assert.equal(manual.single, null);
-      assert.equal(manual.double, null);
+      assert.ok(entries.every(entry => !['S','D'].includes(entry.designation)));
     }
     assert.match(String(report.payload.staffAM), /^\d+(?:\.5)?$/);
     assert.match(String(report.payload.staffPM), /^\d+(?:\.5)?$/);
@@ -131,8 +127,8 @@ test('comprehensive batch covers every Ward entry structure and effective config
     assert.ok(referencedBeds.every(bed => bed >= 1 && bed <= Number(report.payload.totalPatientM)), `occupied-bed references must not point at an empty bed in ${report.ward_name}`);
   }
 
-  assert.ok(bundle.reports.some(r => r.payload.emptyBeds.details.some(d => d.location && /^[MF]$/.test(d.gender) && d.remark)));
-  assert.ok(bundle.reports.some(r => r.ward_name === 'B2' && r.payload.emptyBeds.reported.single > 0 && r.payload.emptyBeds.reported.double > 0));
+  assert.ok(bundle.reports.some(r => r.payload.emptyBeds.entries.some(e => /^[MF]$/.test(e.designation) && e.remark)));
+  assert.ok(bundle.reports.some(r => r.ward_name === 'B2' && r.payload.emptyBeds.entries.some(e => e.designation === 'S') && r.payload.emptyBeds.entries.some(e => e.designation === 'D')));
   assert.ok(bundle.reports.some(r => r.payload.earlyBirds.some(e => e.bed && e.dest)));
   assert.ok(bundle.reports.some(r => r.payload.patients.some(row => row.length === 3 && row.every(Boolean))));
   assert.ok(bundle.reports.some(r => r.payload.consultations.some(row => row.length === 3 && row.every(Boolean))));

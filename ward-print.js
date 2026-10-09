@@ -1,7 +1,7 @@
 // Original Night Memo print renderer adapted for the Supabase ward page.
 // The visual structure and default font sizes follow the legacy Ward C5 app.
 
-import { formatEmptyBedReporting } from './domain/empty-bed-reporting.js';
+import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './domain/empty-bed-reporting.js';
 const STORAGE_KEY = 'nightMemoPdfSettingsV1';
 
 export const DEFAULT_WARD_PRINT_SETTINGS = Object.freeze({
@@ -247,21 +247,10 @@ function emptyBedInfo(D,ward,capacity){
   const computed=Math.max(0,(Number(capacity)||0)-(Number(D.totalPatientM)||0));
   const count=Number.isFinite(Number(D.emptyBeds?.count))?Number(D.emptyBeds.count):computed;
   const mode=ward?.empty_bed_gender_mode||'none';
-  const prefix=D.emptyBeds?.reported ? '' : (mode==='male'?'M ':mode==='female'?'F ':'');
-  const details=(D.emptyBeds?.details||[]).filter(x=>x&&(x.location||x.gender||x.remark));
-  let detailHtml='';
-  if(details.length){
-    detailHtml='<div class="empty-detail-note">'+details.map(x=>{
-      const bits=[];
-      if(x.gender)bits.push(escHtml(x.gender));
-      if(x.location)bits.push(escHtml(x.location));
-      let text=bits.join(' ');
-      if(x.remark)text+=(text?' ':'')+'('+escHtml(x.remark)+')';
-      return text;
-    }).join('<br>')+'</div>';
-  }
-  const manual=formatEmptyBedReporting(D.emptyBeds?.reported,{includeMissing:true});
-  const manualHtml=D.emptyBeds?.reported?'<div class="empty-detail-note"><b>Manual M/F/S/D:</b> '+escHtml(manual)+'</div>':'';
+  const prefix=(D.emptyBeds?.reported || Array.isArray(D.emptyBeds?.entries)) ? '' : (mode==='male'?'M ':mode==='female'?'F ':'');
+  const labels=formatEmptyBedEntries(legacyEmptyBedEntries(D.emptyBeds,ward));
+  const detailHtml=labels ? '<div class="empty-detail-note">'+escHtml(labels)+'</div>' : '';
+  const manualHtml='';
   return{count,prefix,detailHtml,manualHtml};
 }
 

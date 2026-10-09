@@ -17,7 +17,7 @@ test('Manager Ward Information uses separate source sections', () => {
   assert.match(managerHtml, /Patient List/);
   assert.match(managerHtml, /Consultation/);
   assert.match(managerHtml, /Intubation/);
-  assert.match(managerHtml, /Additional Report Items/);
+  assert.doesNotMatch(managerHtml, /No configured Additional Report Items/);
 
   assert.doesNotMatch(managerHtml, /Clinical \/ General Information/);
 });

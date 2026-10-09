@@ -6,7 +6,7 @@ import {
   normalizeReportPayload,
 } from './report-model.js';
 import { wardRequiresPerBedGender } from './ward.js';
-import { makeEmptyBedReporting, formatEmptyBedReporting } from './empty-bed-reporting.js';
+import { formatEmptyBedEntries } from './empty-bed-reporting.js';
 
 export const GENERATED_DEMO_FORMAT = 'night-memo-generated-v2';
 
@@ -277,32 +277,21 @@ function directValue(item, preferred, rng, scenario) {
   return String(preferred);
 }
 
-/**
- * Synthetic nurse-entered categories. They are NOT obtained by subdividing
- * capacity - census, and are never used to alter the calculated total.
- * S and D represent vacant rooms; M and F represent individually classified beds.
- */
-function syntheticManualEmptyBedReporting(ward, rng) {
+/** Test Data uses exactly the same ordered, remark-bearing entries as Ward input. */
+function syntheticManualEmptyBedEntries(ward, rng) {
   const mode = ward?.empty_bed_gender_mode || 'none';
-  const allowsMale = mode !== 'female' && mode !== 'none';
-  const allowsFemale = mode !== 'male' && mode !== 'none';
-  return makeEmptyBedReporting({
-    male: allowsMale ? randomInt(rng, 0, 3) : 0,
-    female: allowsFemale ? randomInt(rng, 0, 3) : 0,
-    single: randomInt(rng, 0, 2),
-    double: randomInt(rng, 0, 2),
-  }, ward);
-}
-
-function emptyBedDetails(ward, emptyCount, rng) {
-  if (!wardRequiresPerBedGender(ward) || emptyCount <= 0) return [];
-  const count = Math.min(emptyCount, chance(rng, 0.35) ? 2 : 1);
-  const remarks = ['D room', 'TB', 'HZ', 'Side room'];
-  return Array.from({ length: count }, (_, index) => ({
-    location: String(Math.max(1, asNumber(ward.capacity, 40) - index)),
-    gender: index % 2 === 0 ? 'M' : 'F',
-    remark: remarks[index % remarks.length],
-  }));
+  const entries = [];
+  const primary = mode === 'female' ? 'F' : 'M';
+  if (mode !== 'none') {
+    entries.push({ quantity: 1, designation: primary, remark: 'TB' });
+    entries.push({ quantity: 1, designation: primary, remark: 'HZV' });
+    if (mode === 'mixed') entries.push({ quantity: randomInt(rng, 1, 2), designation: 'F', remark: '' });
+  }
+  if (ward?.single_double_reporting_enabled === true) {
+    entries.push({ quantity: randomInt(rng, 1, 2), designation: 'S', remark: '' });
+    entries.push({ quantity: 1, designation: 'D', remark: chance(rng, 0.4) ? 'Isolation' : '' });
+  }
+  return entries;
 }
 
 function clinicalRows({ ward, capacity, rng, scenario, currentSession }) {
@@ -368,15 +357,13 @@ function buildSessionPayload({ ward, capacity, items, staffByWard, rng, scenario
   payload.totalPatientM = directValue(itemByKey.get('totalPatientM'), total, rng, scenario);
 
   // Capacity - census is the only source of the calculated Empty Bed total.
-  // Separate synthetic M/F/S/D values simulate what a nurse manually entered.
-  // Mixed wards also receive optional legacy location/gender/remark details.
+  // Ordered remarks are entered independently of the calculated count.
   const actualTotal = clamp(asNumber(payload.totalPatientM, total), 0, cap);
   payload.totalPatientM = String(actualTotal);
   const emptyCount = Math.max(0, cap - actualTotal);
   payload.emptyBeds = {
     count: emptyCount,
-    details: emptyBedDetails({ ...ward, capacity: cap }, emptyCount, rng),
-    reported: syntheticManualEmptyBedReporting(ward, rng),
+    entries: syntheticManualEmptyBedEntries(ward, rng),
   };
 
   const occupiedBeds = Math.max(1, actualTotal);
@@ -577,32 +564,15 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
     }
   }
 
-  const mixedWard = activeWards.find(wardRequiresPerBedGender);
-  if (mixedWard) {
-    const target = targetCurrentReport(reports, mixedWard.name);
-    if (target && !target.payload.emptyBeds?.details?.length) {
-      const cap = Math.max(1, Number(target.preview_capacity) || 1);
-      let total = clamp(asNumber(target.payload.totalPatientM, cap - 1), 0, cap);
-      if (total >= cap) total = Math.max(0, cap - 1);
-      target.payload.totalPatientM = String(total);
-      target.payload.emptyBeds = {
-        count: Math.max(1, cap - total),
-        details: [{ location: String(cap), gender: 'M', remark: 'Shared room' }],
-        reported: target.payload.emptyBeds?.reported ?? null,
-      };
-      removeBedFromPayload(target.payload, String(cap));
-    }
-  }
-
-  // Guarantee both room-classification codes are visible when any ward has
-  // enabled S/D. This modifies ONLY synthetic manual entries, never the total.
+  // Ensure both S and D are covered whenever that ward setting is enabled.
   const sdWard = activeWards.find(ward => ward.single_double_reporting_enabled === true);
   if (sdWard) {
-    const matching = reports.filter(report => report.ward_name === sdWard.name);
-    const target = matching.find(report => Number(report.payload.emptyBeds?.count) > 0) || matching[0];
-    if (target?.payload.emptyBeds?.reported && Number(target.preview_capacity) >= 2) {
-      target.payload.emptyBeds.reported.single = 1;
-      target.payload.emptyBeds.reported.double = 1;
+    const target = targetCurrentReport(reports, sdWard.name);
+    if (target) {
+      const entries = target.payload.emptyBeds.entries || [];
+      if (!entries.some(entry => entry.designation === 'S')) entries.push({ quantity: 1, designation: 'S', remark: '' });
+      if (!entries.some(entry => entry.designation === 'D')) entries.push({ quantity: 1, designation: 'D', remark: '' });
+      target.payload.emptyBeds.entries = entries;
     }
   }
 }
@@ -686,12 +656,11 @@ function buildCoverageSummary(reports, items, activeWards, staffByWard) {
       .every(key => reports.some(report => Number(report.payload[key]) > 0)),
     total_patient: reports.some(report => Number(report.payload.totalPatientM) > 0),
     empty_bed_count: reports.some(report => Number(report.payload.emptyBeds?.count) > 0),
-    manual_empty_bed_mf: reports.every(report => Number.isSafeInteger(report.payload.emptyBeds?.reported?.male)
-      && Number.isSafeInteger(report.payload.emptyBeds?.reported?.female)),
-    manual_empty_bed_sd: sdApplicable ? reports.filter(report => report.payload.emptyBeds?.reported?.singleDoubleEnabled === true)
-      .some(report => Number.isSafeInteger(report.payload.emptyBeds?.reported?.single)
-        && Number.isSafeInteger(report.payload.emptyBeds?.reported?.double)
-        && (report.payload.emptyBeds.reported.single > 0 || report.payload.emptyBeds.reported.double > 0)) : null,
+    manual_empty_bed_mf: reports.every(report => Array.isArray(report.payload.emptyBeds?.entries)
+      && report.payload.emptyBeds.entries.every(entry => Number.isSafeInteger(entry.quantity)
+        && ['M','F','S','D'].includes(entry.designation))),
+    manual_empty_bed_sd: sdApplicable ? reports.some(report => report.payload.emptyBeds?.entries?.some(entry =>
+      ['S','D'].includes(entry.designation))) : null,
     patient_list: reports.some(report => !report.payload.nilSpecial && report.payload.patients.length),
     patient_nil_state: reports.some(report => report.payload.nilSpecial && !report.payload.patients.length),
     consultation: reports.some(report => !report.payload.nilConsultation && report.payload.consultations.length),
@@ -702,7 +671,7 @@ function buildCoverageSummary(reports, items, activeWards, staffByWard) {
     night_runner: reports.some(report => report.payload.nurses?.some(nurse => nurse.runner)),
     free_text_nurse: reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'free_text')),
     ward_staff_nurse: staffApplicable ? reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'ward_staff')) : null,
-    mixed_empty_bed_detail: mixedApplicable ? reports.some(report => report.payload.emptyBeds?.details?.some(detail => detail.location && detail.gender && detail.remark)) : null,
+    empty_bed_remarks: reports.some(report => report.payload.emptyBeds?.entries?.some(entry => entry.remark)),
     signature: reports.some(report => report.payload.sigRank && report.payload.sigName && report.payload.sigAppt),
     staffing_counts: reports.every(report => /^\d+(?:\.5)?$/.test(String(report.payload.staffAM)) && /^\d+(?:\.5)?$/.test(String(report.payload.staffPM))),
     bed_or_count_beds_mode: hasBedOrCount ? bedOrCountValues.some(value => value?.mode === 'beds' && asArray(value.beds).length) : null,
@@ -794,7 +763,7 @@ export function generateDemoDataBundle({
     scenario,
     seed: Number(seed),
     generated_at: new Date(now).toISOString(),
-    generator_version: 3,
+    generator_version: 4,
     description: `${config.label}: ${activeWards.length} active wards, ${currentReports.length} current submissions, ${activeWards.length - currentReports.length} not yet submitted in the current window.`,
     meta: {
       active_wards: activeWards.length,
@@ -823,7 +792,7 @@ export function summarizeGeneratedReport(report) {
   return {
     total: Number(payload.totalPatientM) || 0,
     empty: Number(payload.emptyBeds?.count) || 0,
-    reported: formatEmptyBedReporting(payload.emptyBeds?.reported, { includeMissing: true }),
+    reported: formatEmptyBedEntries(payload.emptyBeds?.entries) || 'Not reported',
     clinical: clinical.length ? clinical.join(', ') : 'No clinical-attention text',
   };
 }

@@ -1,7 +1,7 @@
 import { addDaysISO, todayISO, toDisplayDate, REPORT_TIME_ZONE } from '../core/dates.js';
 import { deviceCount, normalizeDevice, normalizeReportPayload } from './report-model.js';
 import { reportSubmittedAt } from './report-session.js';
-import { formatEmptyBedReporting } from './empty-bed-reporting.js';
+import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './empty-bed-reporting.js';
 
 function hktHour(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -39,8 +39,12 @@ export function formatManagerEmptyBeds(ward, report, capacity = 0) {
   const D = normalizeReportPayload(report.payload);
   const empty = D.emptyBeds || { count: Math.max(0, Number(capacity || 0) - Number(D.totalPatientM || 0)), details: [] };
   const count = Math.max(0, Number(empty.count || 0));
+  if (Array.isArray(empty.entries)) {
+    const manual = formatEmptyBedEntries(empty.entries);
+    return String(count) + (manual ? ' (' + manual + ')' : '');
+  }
   if (empty.reported) {
-    const manual = formatEmptyBedReporting(empty.reported, { includeMissing: true });
+    const manual = formatEmptyBedEntries(legacyEmptyBedEntries(empty, ward)) || formatEmptyBedReporting(empty.reported, { includeMissing: true });
     return String(count) + (manual ? ' (' + manual + ')' : '');
   }
   const details = Array.isArray(empty.details) ? empty.details : [];

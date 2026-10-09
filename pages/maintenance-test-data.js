@@ -102,7 +102,7 @@ function renderCoverage(bundle) {
     ['Night Runner', c.night_runner, 'Runner flag on Night Nurse'],
     ['Free-text / relief nurse', c.free_text_nurse, 'Tests non-database nurse entry'],
     ['Configured ward staff nurse', c.ward_staff_nurse, c.ward_staff_nurse === null ? 'No configured staff available' : 'Tests staffId / ward_staff source'],
-    ['Mixed empty-bed detail', c.mixed_empty_bed_detail, c.mixed_empty_bed_detail === null ? 'No mixed-gender ward configured' : 'Location, gender and remark'],
+    ['Empty Bed remarks', c.empty_bed_remarks, 'Independent M/F/S/D entries with optional remarks'],
     ['Signature', c.signature, 'Rank, name and appointment'],
     ['AM / PM staffing', c.staffing_counts, 'Numeric headcount, including 0.5 increments'],
     ['Bed-or-count: By Bed', c.bed_or_count_beds_mode, c.bed_or_count_beds_mode === null ? 'No bed-or-count item configured' : 'Bed selection mode exercised'],

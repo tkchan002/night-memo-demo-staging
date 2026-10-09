@@ -48,20 +48,20 @@ export const DEMO_STAFF = DEMO_WARDS.flatMap((w, idx) => [
 function samplePayload(ward, i) {
   const capacity = ward.capacity;
   const total = capacity - (i % 5);
-  const dynamicDetails = ward.empty_bed_gender_mode === 'mixed'
-    ? Array.from({length:capacity-total}, (_,j)=>({location:String(capacity-j), gender:j%2===0?'M':'F', remark:j===0 && i%3===0?'HZ':''}))
-    : [];
+  const kind = ward.empty_bed_gender_mode === 'female' ? 'F' : 'M';
+  const entries = [
+    { quantity: 1, designation: kind, remark: 'TB' },
+    { quantity: 1, designation: kind, remark: 'HZV' },
+  ];
+  if (ward.empty_bed_gender_mode === 'mixed') entries.push({ quantity: 1, designation: 'F', remark: '' });
+  if (ward.single_double_reporting_enabled === true) {
+    entries.push({ quantity: 1, designation: 'S', remark: '' });
+    entries.push({ quantity: 1, designation: 'D', remark: '' });
+  }
   return {
     admissionEC:String((i*3+2)%11), admissionCC:String(i%3), discharge:String((i*2+3)%10), death:String(i%2),
     transferIn:String(i%4), transferOut:String((i+1)%4), totalPatientM:String(total),
-    emptyBeds:{
-      count:capacity-total, details:dynamicDetails,
-      reported:{version:1, singleDoubleEnabled:ward.single_double_reporting_enabled===true,
-        male:ward.empty_bed_gender_mode==='female'?0:i%3,
-        female:ward.empty_bed_gender_mode==='male'?0:(i+1)%3,
-        single:ward.single_double_reporting_enabled===true?1:null,
-        double:ward.single_double_reporting_enabled===true?1:null},
-    },
+    emptyBeds:{ count:capacity-total, entries },
     earlyBirds:i%3===0?[{bed:String(10+i),dest:'Rehab'}]:[],
     infBeds:{iCRE:i%4===0?[32]:[],iVRE:[],iCOV:[],iMDR:[],iCD:[],iInf:i%5===0?[12]:[],iCA:[]},
     devBeds:{dMV:{mode:'beds',count:0,beds:i%2===0?[11]:[]},dNIV:{mode:'beds',count:0,beds:i%3===0?[21]:[]},dHF:{mode:'beds',count:0,beds:[]},dHD:{mode:'count',count:i%2,beds:[]},dCA:{mode:'beds',count:0,beds:[]}},

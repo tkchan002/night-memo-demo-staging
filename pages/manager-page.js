@@ -1031,11 +1031,9 @@ function renderWardInformation() {
           { key: 'outcome', label: 'Patient Outcome' },
         ], row.intubation.rows, { className: 'intubation-table-wrap' }) || '<div class="ward-info-nil">No intubation rows recorded.</div>';
 
-    const additional = noSubmission
-      ? unavailable
-      : row.additionalItems.length
-        ? `<table class="ward-additional-table"><tbody>${row.additionalItems.map(item => `<tr><th>${esc(item.label)}</th><td>${esc(item.value || '—')}</td></tr>`).join('')}</tbody></table>`
-        : '<div class="ward-info-nil">No configured Additional Report Items.</div>';
+    const additional = !noSubmission && row.additionalItems.length
+      ? `<table class="ward-additional-table"><tbody>${row.additionalItems.map(item => `<tr><th>${esc(item.label)}</th><td>${esc(item.value || '—')}</td></tr>`).join('')}</tbody></table>`
+      : '';
 
     return `<article class="ward-information-card${row.report ? '' : ' missing'}">
       <header class="ward-information-card-head">
@@ -1046,7 +1044,7 @@ function renderWardInformation() {
         ${renderWardInfoSection('Patient List', patientList)}
         ${renderWardInfoSection('Consultation', consultation)}
         ${renderWardInfoSection('Intubation', intubation, { wide: true })}
-        ${renderWardInfoSection('Additional Report Items', additional, { wide: true })}
+        ${additional ? renderWardInfoSection('Additional Report Items', additional, { wide: true }) : ''}
       </div>
     </article>`;
   }).join('');

@@ -40,7 +40,7 @@ test('Ward PDF source renders independently entered counts, including S/D', asyn
     capacity: 40,
   });
   assert.match(html, /Empty Bed:\s*5/);
-  assert.match(html, /Manual M\/F\/S\/D:/);
+  assert.doesNotMatch(html, /Manual M\/F\/S\/D:/);
   assert.match(html, /1M, 2S, 1D/);
 });
 
@@ -56,6 +56,6 @@ test('S/D is persisted with the ward, not as a generic Report Item', async () =>
   const maint = await readFile(new URL('../pages/maintenance-page.js', import.meta.url), 'utf8');
   const ward = await readFile(new URL('../pages/ward-page.js', import.meta.url), 'utf8');
   assert.match(maint, /single_double_reporting_enabled: \$\('#mWardSingleDouble'\)\.checked/);
-  assert.match(ward, /makeEmptyBedReporting/);
+  assert.match(ward, /collectEmptyDetails/);
   assert.match(ward, /count: calcEmpty\(\)/);
 });
