@@ -12,7 +12,7 @@ import {
   DIRECT_REPORT_KEYS, fullReportPayloadDefaults, normalizeReportPayload,
   normalizeDevice, formatDevice, formatDynamic,
 } from '../domain/report-model.js';
-import { parseEmptyBedLabel, legacyEmptyBedEntries, formatEmptyBedEntries } from '../domain/empty-bed-reporting.js';
+import { legacyEmptyBedEntries, formatEmptyBedEntries } from '../domain/empty-bed-reporting.js';
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
 import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
 
@@ -282,8 +282,6 @@ function setDynamicValue(item, value) { if (item.input_type === 'bed_chooser') s
 function getDynamicValue(item) { if (item.input_type === 'bed_chooser') return getBeds(`dyn_${item.key}`); if (item.input_type === 'bed_or_count') return getDeviceValue(`dyn_${item.key}`); const el = $(`#dyn_${CSS.escape(item.key)}`); if (!el) return null; return item.input_type === 'checkbox' ? el.checked : el.value; }
 function updateEmptyBedMode() {
   $('#emptyBedLabel').textContent = 'Total Empty Bed:';
-  const enabled = state.ward?.single_double_reporting_enabled === true;
-  $$('#emptyBedDesignationSuggestions option[data-room-option]').forEach(option => { option.disabled = !enabled; });
   // This is the original Optional Bed / Location Remarks block for every ward.
   $('#emptyDetailBlock').classList.remove('hidden');
   calcEmpty();
@@ -291,22 +289,36 @@ function updateEmptyBedMode() {
 function calcEmpty() { const total = Number($('#totalPatientM').value) || 0; const count = Math.max(0, (Number(state.capacity) || 0) - total); $('#emptyBedM').textContent = String(count); $('#emptyBedFormula').textContent = `(${state.capacity} - Total)`; return count; }
 function addEmptyDetail(value = {}) {
   const row = document.createElement('div');
-  row.className = 'empty-detail-row';
-  const designation = value.designation && value.quantity ? `${value.quantity}${value.designation}` : '';
-  // Use the same .fr layout, native inputs, and .btn-x buttons as other Ward rows.
-  row.classList.add('fr');
-  row.innerHTML = `<span class="fc"><input type="text" data-empty-designation style="width:95px" list="emptyBedDesignationSuggestions" placeholder="e.g. 1M" aria-label="Empty bed designation" value="${esc(designation)}"><input type="text" class="w280" data-empty-remark placeholder="Remark (optional, e.g. TB)" aria-label="Optional empty bed remark" value="${esc(value.remark || '')}"><button class="btn-x" type="button" aria-label="Remove empty bed entry">x</button></span>`;
+  row.className = 'empty-detail-row fr';
+  // Match the Ward form's existing native selects, input, flex rows and remove button.
+  const savedNumber = String(value.quantity ?? '');
+  const savedCode = String(value.designation ?? '').trim().toUpperCase();
+  const numericValue = Number(savedNumber);
+  const maxNumber = Math.max(bedCeiling(), Number.isSafeInteger(numericValue) && numericValue > 0 ? numericValue : 0);
+  const numberOptions = ['<option value=""></option>'];
+  for (let number = 1; number <= maxNumber; number += 1) {
+    numberOptions.push(`<option value="${number}">${number}</option>`);
+  }
+  const designationOptions = ['<option value=""></option>'];
+  const enabled = state.ward?.single_double_reporting_enabled === true;
+  const availableCodes = enabled ? ['M', 'F', 'S', 'D'] : ['M', 'F'];
+  // Retain previously recorded categories when showing a historical report.
+  if (['S', 'D'].includes(savedCode) && !availableCodes.includes(savedCode)) availableCodes.push(savedCode);
+  for (const code of availableCodes) designationOptions.push(`<option value="${code}">${code}</option>`);
+  row.innerHTML = `<span class="fc"><select data-empty-quantity style="width:70px" aria-label="Empty bed number">${numberOptions.join('')}</select><select data-empty-designation style="width:80px" aria-label="Empty bed M, F, S or D">${designationOptions.join('')}</select><input type="text" class="w280" data-empty-remark aria-label="Empty bed remarks" value="${esc(value.remark || '')}"><button class="btn-x" type="button" aria-label="Remove empty bed entry">x</button></span>`;
+  $('[data-empty-quantity]', row).value = savedNumber;
+  $('[data-empty-designation]', row).value = savedCode;
   $('.btn-x', row).onclick = () => { row.remove(); markDirty(); };
   $('#emptyDetailRows').append(row);
   markDirty();
 }
 function collectEmptyDetails() {
   return $$('.empty-detail-row', $('#emptyDetailRows')).map(row => {
-    const input = $('[data-empty-designation]', row).value.trim();
+    const number = $('[data-empty-quantity]', row).value;
+    const designation = $('[data-empty-designation]', row).value;
     const remark = $('[data-empty-remark]', row).value.trim();
-    if (!input && !remark) return null;
-    const parsed = parseEmptyBedLabel(input);
-    return { quantity: parsed?.quantity ?? input, designation: parsed?.designation ?? '', remark };
+    if (!number && !designation && !remark) return null;
+    return { quantity: number ? Number(number) : null, designation, remark };
   }).filter(Boolean);
 }
 function addEB(bed = '', dest = '') { const row = document.createElement('div'); row.className = 'fr'; row.style.marginBottom = '4px'; let options = '<option value="">--</option>'; for (let i = 1; i <= bedCeiling(); i += 1) options += `<option value="${i}" ${String(bed) === String(i) ? 'selected' : ''}>${i}</option>`; row.innerHTML = `<select class="eB" style="width:70px">${options}</select><span style="padding:0 8px;font-size:1rem;font-weight:700">--&gt;</span><input type="text" class="eD" style="width:150px" placeholder="e.g. KH3A" value="${esc(dest || '')}"><button class="btn-x" type="button" style="margin-left:6px">x</button>`; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#ebRows').append(row); }
