@@ -1,6 +1,7 @@
 // Original Night Memo print renderer adapted for the Supabase ward page.
 // The visual structure and default font sizes follow the legacy Ward C5 app.
 
+import { formatEmptyBedReporting } from './domain/empty-bed-reporting.js';
 const STORAGE_KEY = 'nightMemoPdfSettingsV1';
 
 export const DEFAULT_WARD_PRINT_SETTINGS = Object.freeze({
@@ -246,7 +247,7 @@ function emptyBedInfo(D,ward,capacity){
   const computed=Math.max(0,(Number(capacity)||0)-(Number(D.totalPatientM)||0));
   const count=Number.isFinite(Number(D.emptyBeds?.count))?Number(D.emptyBeds.count):computed;
   const mode=ward?.empty_bed_gender_mode||'none';
-  const prefix=mode==='male'?'M ':mode==='female'?'F ':'';
+  const prefix=D.emptyBeds?.reported ? '' : (mode==='male'?'M ':mode==='female'?'F ':'');
   const details=(D.emptyBeds?.details||[]).filter(x=>x&&(x.location||x.gender||x.remark));
   let detailHtml='';
   if(details.length){
@@ -259,7 +260,9 @@ function emptyBedInfo(D,ward,capacity){
       return text;
     }).join('<br>')+'</div>';
   }
-  return{count,prefix,detailHtml};
+  const manual=formatEmptyBedReporting(D.emptyBeds?.reported,{includeMissing:true});
+  const manualHtml=D.emptyBeds?.reported?'<div class="empty-detail-note"><b>Manual M/F/S/D:</b> '+escHtml(manual)+'</div>':'';
+  return{count,prefix,detailHtml,manualHtml};
 }
 
 function legacyFlowGenderPrefix(ward){
@@ -351,7 +354,7 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
         '<td class="transfer"><div class="section-title">T/I:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferIn||'0')+'</div><div class="thin-line"></div><div class="section-title">T/O:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferOut||'0')+'</div><div class="thin-line"></div></td>'+
         '<td>'+memoInfectionHtml(D,items)+'</td>'+
         '<td class="dev">'+memoDeviceHtml(D,items)+'</td>'+
-        '<td><div class="total-line">Total Patient: '+escHtml(flowPrefix)+escHtml(totalPatient)+'</div><div class="total-line">Empty Bed: '+escHtml(empty.prefix)+escHtml(empty.count)+'</div>'+empty.detailHtml+'<div class="early"><b>Next day early bird:</b> <i>eg.15--&gt;KH3A</i><br>'+earlyBirds+'</div></td>'+
+        '<td><div class="total-line">Total Patient: '+escHtml(flowPrefix)+escHtml(totalPatient)+'</div><div class="total-line">Empty Bed: '+escHtml(empty.prefix)+escHtml(empty.count)+'</div>'+empty.manualHtml+empty.detailHtml+'<div class="early"><b>Next day early bird:</b> <i>eg.15--&gt;KH3A</i><br>'+earlyBirds+'</div></td>'+
       '</tr></tbody></table>'+additionalItemsHtml(D,items)+
       '<div class="patient-section"><div class="patient-head"><div>Bed No.</div><div>Name of Patient</div><div>Diagnosis / Condition / Progress</div></div><div class="patient-lines">'+memoPatientRows(D)+'</div></div>'+
       '<div class="consult-note">Please mark down cases awaiting subspecialty consultation (only apply to Fri, Sat &amp; day before public holiday)</div>'+

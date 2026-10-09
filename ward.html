@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="./css/legacy-shell.css">
   <link rel="stylesheet" href="./css/ward.css">
   <link rel="stylesheet" href="./css/ward-draft-submit.css">
+  <link rel="stylesheet" href="./css/empty-bed-reporting.css">
 </head>
 <body class="legacy-page ward-page">
 <div id="statusBox"></div>
@@ -71,11 +72,23 @@
           <div class="sec-title" style="font-size:1.15rem;margin-top:10px">Bed Count</div>
           <div class="fr"><span class="fl">Total Patient:</span><span class="fc"><input type="number" id="totalPatientM" class="w55" min="0" placeholder="0" oninput="calcEmpty()"></span></div>
           <div class="fr"><span class="fl" id="emptyBedLabel">Empty Bed:</span><span class="fc"><b id="emptyBedM" style="font-size:1.15rem">0</b><span id="emptyBedFormula" style="color:#6F6F6F;margin-left:6px"></span></span></div>
+          <section id="emptyManualBlock" class="empty-manual-section" aria-label="Manual empty bed reporting">
+            <div class="empty-manual-title">Empty Bed Reporting (manual)</div>
+            <div class="legacy-subtle">M/F are individual empty beds; S/D are completely vacant single/double-bed rooms. Entries do not affect Total Empty Bed.</div>
+            <div class="empty-manual-grid">
+              <label for="ebReportM">Male (M)<input type="number" id="ebReportM" min="0" step="1" inputmode="numeric" placeholder="Not entered"></label>
+              <label for="ebReportF">Female (F)<input type="number" id="ebReportF" min="0" step="1" inputmode="numeric" placeholder="Not entered"></label>
+              <div id="emptyManualSD" class="empty-manual-sd hidden">
+                <label for="ebReportS">Vacant single room (S)<input type="number" id="ebReportS" min="0" step="1" inputmode="numeric" placeholder="Not entered"></label>
+                <label for="ebReportD">Vacant double room (D)<input type="number" id="ebReportD" min="0" step="1" inputmode="numeric" placeholder="Not entered"></label>
+              </div>
+            </div>
+          </section>
           <div id="emptyDetailBlock" class="hidden">
-            <div style="font-weight:700;margin-bottom:6px">Empty Bed Information</div>
+            <div style="font-weight:700;margin-bottom:6px">Optional Bed / Location Remarks</div>
             <div id="emptyDetailRows"></div>
             <button class="btn-s" onclick="addEmptyDetail()">+ Add Empty Bed Detail</button>
-            <div class="legacy-subtle" style="margin-top:5px">Gender is recorded only here for wards with mixed male/female bed assignment.</div>
+            <div class="legacy-subtle" style="margin-top:5px">These optional bed-level remarks do not change the manual M/F/S/D figures or the calculated total.</div>
           </div>
           <div id="dynamicAdmissionRows"></div>
           <hr class="sep">

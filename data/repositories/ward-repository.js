@@ -114,6 +114,7 @@ export async function createWard(config) {
       phone: config.phone,
       fax: config.fax,
       empty_bed_gender_mode: config.empty_bed_gender_mode || 'male',
+      single_double_reporting_enabled: config.single_double_reporting_enabled === true,
       display_order: Math.max(0, ...state.wards.map(w => Number(w.display_order) || 0)) + 1,
       active: true,
       created_at: now,
@@ -131,6 +132,7 @@ export async function createWard(config) {
     phone: config.phone,
     fax: config.fax,
     empty_bed_gender_mode: config.empty_bed_gender_mode,
+    single_double_reporting_enabled: config.single_double_reporting_enabled === true,
     active: true,
   }).select().single();
   if (error) throw error;

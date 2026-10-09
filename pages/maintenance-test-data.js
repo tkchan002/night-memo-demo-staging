@@ -76,6 +76,7 @@ function renderConfiguration(bundle) {
     <div class="demo-summary-item"><b>${esc(bundle.meta.custom_report_items)}</b><span>Custom report items</span></div>
     <div class="demo-summary-item"><b>${esc(bundle.meta.configured_staff)}</b><span>Configured staff records</span></div>
     <div class="demo-summary-item"><b>${esc(bundle.meta.mixed_gender_wards)}</b><span>Mixed-gender wards</span></div>
+    <div class="demo-summary-item"><b>${esc(bundle.meta.sd_reporting_wards)}</b><span>S/D reporting wards</span></div>
     <div class="demo-summary-item"><b>${esc(bundle.reports.length)}</b><span>Reports in batch</span></div>`;
 }
 
@@ -88,6 +89,8 @@ function renderCoverage(bundle) {
     ['Admission / movement counts', c.movement_counts, 'Admissions, discharge, death and transfers all exercised'],
     ['Total patient count', c.total_patient, 'Configured capacity respected'],
     ['Empty bed count', c.empty_bed_count, 'Derived from capacity and patient count'],
+    ['Manual empty-bed M/F', c.manual_empty_bed_mf, 'Generated independently of Total Empty Bed'],
+    ['Manual vacant room S/D', c.manual_empty_bed_sd, c.manual_empty_bed_sd === null ? 'No ward has S/D enabled' : 'Ward-specific manual S/D categories are generated'],
     ['Configured report items', item.configured ? item.covered === item.configured : true, item.configured ? `${item.covered}/${item.configured}` : 'No configurable items'],
     ['Patient List', c.patient_list, 'Bed, name and condition/progress'],
     ['Patient List: Nil Special', c.patient_nil_state, 'Nil checkbox path also exercised'],
@@ -123,6 +126,7 @@ function renderPreview(bundle) {
       <td><b>${esc(name)}</b></td>
       <td>${current ? `<span class="tag">Submitted ${esc(formatDateTime(current.submitted_at))}</span>` : '<span class="tag subtle">Not submitted in current window</span>'}</td>
       <td>${current ? `${esc(summary.total)} / ${esc(current.preview_capacity)} patients · ${esc(summary.empty)} empty` : '—'}</td>
+      <td>${current ? esc(summary.reported) : '—'}</td>
       <td>${current ? esc(summary.clinical) : '—'}</td>
       <td>${previous ? esc(formatDateTime(previous.submitted_at)) : '—'}</td>
     </tr>`;
@@ -134,7 +138,7 @@ function renderPreview(bundle) {
       <span>${esc(bundle.description)}</span>
       <span>Seed ${esc(bundle.seed)} · generator v${esc(bundle.generator_version || 1)}</span>
     </div>
-    <div class="table-scroll"><table class="data-table"><thead><tr><th>Ward</th><th>Current window</th><th>Occupancy</th><th>Clinical attention</th><th>Previous session</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>Ward</th><th>Current window</th><th>Occupancy</th><th>Manual M/F/S/D</th><th>Clinical attention</th><th>Previous session</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 async function generatePreview() {

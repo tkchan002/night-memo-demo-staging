@@ -1,4 +1,5 @@
 import { numberValue } from '../core/numbers.js';
+import { normalizeEmptyBedReporting } from './empty-bed-reporting.js';
 
 export const DIRECT_REPORT_KEYS = Object.freeze([
   'admissionEC', 'admissionCC', 'discharge', 'death',
@@ -9,7 +10,7 @@ export function fullReportPayloadDefaults() {
   return {
     admissionEC: '0', admissionCC: '0', discharge: '0', death: '0',
     transferIn: '0', transferOut: '0', totalPatientM: '0',
-    emptyBeds: { count: 0, details: [] }, earlyBirds: [],
+    emptyBeds: { count: 0, details: [], reported: null }, earlyBirds: [],
     infBeds: {}, devBeds: {}, dynamicItems: {},
     nilSpecial: true, patients: [],
     nilConsultation: true, consultations: [],
@@ -55,6 +56,7 @@ export function normalizeReportPayload(raw = {}) {
   out.emptyBeds = {
     count: numberValue(raw.emptyBeds?.count, numberValue(defaults.emptyBeds.count)),
     details: Array.isArray(raw.emptyBeds?.details) ? raw.emptyBeds.details.map(x => ({ ...x })) : [],
+    reported: normalizeEmptyBedReporting(raw.emptyBeds?.reported),
   };
   out.earlyBirds = Array.isArray(raw.earlyBirds) ? raw.earlyBirds.map(x => ({ ...x })) : [];
   out.infBeds = Object.fromEntries(Object.entries(raw.infBeds || {}).map(([k, v]) => [k, normalizeBeds(v)]));

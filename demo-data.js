@@ -8,7 +8,7 @@ export const DEMO_WARDS = [
   {name:'E6',  phone:'2372', fax:'9476', empty_bed_gender_mode:'male', display_order:5, capacity:36},
   {name:'C6',  phone:'5333', fax:'1137', empty_bed_gender_mode:'male', display_order:6, capacity:40},
   {name:'G10', phone:'5834', fax:'1153', empty_bed_gender_mode:'male', display_order:7, capacity:40},
-  {name:'G11', phone:'6624', fax:'4882', empty_bed_gender_mode:'mixed', display_order:8, capacity:40},
+  {name:'G11', phone:'6624', fax:'4882', empty_bed_gender_mode:'mixed', single_double_reporting_enabled:true, display_order:8, capacity:40},
   {name:'B10', phone:'4662', fax:'8510', empty_bed_gender_mode:'male', display_order:9, capacity:40},
   {name:'H6',  phone:'1075', fax:'2810', empty_bed_gender_mode:'mixed', display_order:10, capacity:36},
 ];
@@ -54,7 +54,14 @@ function samplePayload(ward, i) {
   return {
     admissionEC:String((i*3+2)%11), admissionCC:String(i%3), discharge:String((i*2+3)%10), death:String(i%2),
     transferIn:String(i%4), transferOut:String((i+1)%4), totalPatientM:String(total),
-    emptyBeds:{count:capacity-total, details:dynamicDetails},
+    emptyBeds:{
+      count:capacity-total, details:dynamicDetails,
+      reported:{version:1, singleDoubleEnabled:ward.single_double_reporting_enabled===true,
+        male:ward.empty_bed_gender_mode==='female'?0:i%3,
+        female:ward.empty_bed_gender_mode==='male'?0:(i+1)%3,
+        single:ward.single_double_reporting_enabled===true?1:null,
+        double:ward.single_double_reporting_enabled===true?1:null},
+    },
     earlyBirds:i%3===0?[{bed:String(10+i),dest:'Rehab'}]:[],
     infBeds:{iCRE:i%4===0?[32]:[],iVRE:[],iCOV:[],iMDR:[],iCD:[],iInf:i%5===0?[12]:[],iCA:[]},
     devBeds:{dMV:{mode:'beds',count:0,beds:i%2===0?[11]:[]},dNIV:{mode:'beds',count:0,beds:i%3===0?[21]:[]},dHF:{mode:'beds',count:0,beds:[]},dHD:{mode:'count',count:i%2,beds:[]},dCA:{mode:'beds',count:0,beds:[]}},

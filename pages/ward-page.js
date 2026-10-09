@@ -13,6 +13,7 @@ import {
   normalizeDevice, formatDevice, formatDynamic,
 } from '../domain/report-model.js';
 import { wardRequiresPerBedGender } from '../domain/ward.js';
+import { makeEmptyBedReporting, formatEmptyBedReporting } from '../domain/empty-bed-reporting.js';
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
 import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
 
@@ -280,7 +281,7 @@ function dynamicRowHtml(item) {
 
 function setDynamicValue(item, value) { if (item.input_type === 'bed_chooser') setBeds(`dyn_${item.key}`, Array.isArray(value) ? value : []); else if (item.input_type === 'bed_or_count') setDeviceValue(`dyn_${item.key}`, value); else { const el = $(`#dyn_${CSS.escape(item.key)}`); if (!el) return; if (item.input_type === 'checkbox') el.checked = !!value; else el.value = value ?? ''; } }
 function getDynamicValue(item) { if (item.input_type === 'bed_chooser') return getBeds(`dyn_${item.key}`); if (item.input_type === 'bed_or_count') return getDeviceValue(`dyn_${item.key}`); const el = $(`#dyn_${CSS.escape(item.key)}`); if (!el) return null; return item.input_type === 'checkbox' ? el.checked : el.value; }
-function updateEmptyBedMode() { const mode = state.ward.empty_bed_gender_mode || 'male'; $('#emptyBedLabel').textContent = mode === 'female' ? 'Empty Bed F:' : mode === 'male' ? 'Empty Bed M:' : 'Empty Bed:'; $('#emptyDetailBlock').classList.toggle('hidden', !wardRequiresPerBedGender(state.ward)); calcEmpty(); }
+function updateEmptyBedMode() { $('#emptyBedLabel').textContent = 'Total Empty Bed:'; $('#emptyManualSD').classList.toggle('hidden', state.ward?.single_double_reporting_enabled !== true); $('#emptyDetailBlock').classList.toggle('hidden', !wardRequiresPerBedGender(state.ward)); calcEmpty(); }
 function calcEmpty() { const total = Number($('#totalPatientM').value) || 0; const count = Math.max(0, (Number(state.capacity) || 0) - total); $('#emptyBedM').textContent = String(count); $('#emptyBedFormula').textContent = `(${state.capacity} - Total)`; return count; }
 function addEmptyDetail(value = {}) { const row = document.createElement('div'); row.className = 'empty-detail-row'; const mixed = wardRequiresPerBedGender(state.ward); row.innerHTML = `<input type="text" data-empty-location style="width:120px" placeholder="Bed / location" value="${esc(value.location || '')}">${mixed ? '<select data-empty-gender><option value="">--</option><option value="M">Male</option><option value="F">Female</option></select>' : ''}<input type="text" data-empty-remark style="width:260px" placeholder="Remark" value="${esc(value.remark || '')}"><button class="btn-x" type="button">x</button>`; if (mixed && value.gender) $('[data-empty-gender]', row).value = value.gender; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#emptyDetailRows').append(row); $('#emptyDetailBlock').classList.remove('hidden'); markDirty(); }
 function collectEmptyDetails() { return $$('.empty-detail-row', $('#emptyDetailRows')).map(row => ({ location: $('[data-empty-location]', row)?.value.trim() || '', gender: $('[data-empty-gender]', row)?.value || null, remark: $('[data-empty-remark]', row)?.value.trim() || '' })).filter(x => x.location || x.gender || x.remark); }
@@ -308,6 +309,10 @@ function fillPayload(raw) {
   state.items.filter(i => !i.builtin).forEach(i => setDynamicValue(i, D.dynamicItems?.[i.key]));
   $('#emptyDetailRows').innerHTML = '';
   (D.emptyBeds?.details || []).forEach(addEmptyDetail);
+  for (const [code, field] of [['M','male'], ['F','female'], ['S','single'], ['D','double']]) {
+    const el = document.getElementById('ebReport' + code);
+    if (el) el.value = D.emptyBeds?.reported?.[field] ?? '';
+  }
   $('#ebRows').innerHTML = '';
   (D.earlyBirds || []).forEach(x => addEB(x.bed, x.dest));
   if (!D.earlyBirds.length) addEB();
@@ -349,7 +354,14 @@ function collectPayload() {
   Object.keys(INF_MAP).forEach(key => { D.infBeds[key] = getBeds(key); });
   Object.keys(DEV_MAP).forEach(key => { D.devBeds[key] = getDeviceValue(key); });
   state.items.filter(i => !i.builtin).forEach(i => { D.dynamicItems[i.key] = getDynamicValue(i); });
-  D.emptyBeds = { count: calcEmpty(), details: collectEmptyDetails() };
+  D.emptyBeds = {
+    count: calcEmpty(),
+    details: collectEmptyDetails(),
+    reported: makeEmptyBedReporting({
+      male: $('#ebReportM').value, female: $('#ebReportF').value,
+      single: $('#ebReportS').value, double: $('#ebReportD').value,
+    }, state.ward),
+  };
   D.earlyBirds = $$('#ebRows>.fr').map(row => ({ bed: $('.eB', row).value, dest: $('.eD', row).value.trim() })).filter(x => x.bed || x.dest);
   D.nilSpecial = $('#nilCb').checked;
   D.patients = D.nilSpecial ? [] : collectTableRows('#ptBody', 3);
@@ -488,7 +500,7 @@ function renderHistorySections(report, items, capacity) {
     : { count: Math.max(0, cap - Number(D.totalPatientM || 0)), details: [] };
 
   const admissionDynamic = dynamicRows(items, D, i => i.section === 'admission' || i.section === 'bedcount');
-  $('#hd0').innerHTML = `<div class="ro-wrap"><div class="ro-sec-title">Admission / Discharge / Death</div>${roFr('Admission E/C:', D.admissionEC)}${roFr('Admission C/C:', D.admissionCC)}${roFr('Discharge:', D.discharge)}${roFr('Death:', D.death)}${roFr('T/I Gen:', D.transferIn)}${roFr('T/O Gen:', D.transferOut)}${roFr('Total Patient:', D.totalPatientM)}${roFr('Empty Bed:', empty.count)}${roFr('Early Bird(s):', D.earlyBirds.map(x => `${x.bed || '?'} -> ${x.dest || '?'}`).join(' | ') || 'None')}${admissionDynamic}</div>`;
+  $('#hd0').innerHTML = `<div class="ro-wrap"><div class="ro-sec-title">Admission / Discharge / Death</div>${roFr('Admission E/C:', D.admissionEC)}${roFr('Admission C/C:', D.admissionCC)}${roFr('Discharge:', D.discharge)}${roFr('Death:', D.death)}${roFr('T/I Gen:', D.transferIn)}${roFr('T/O Gen:', D.transferOut)}${roFr('Total Patient:', D.totalPatientM)}${roFr('Empty Bed:', empty.count)}${empty.reported ? roFr('Manual M/F/S/D:', formatEmptyBedReporting(empty.reported, { includeMissing: true })) : ''}${roFr('Early Bird(s):', D.earlyBirds.map(x => `${x.bed || '?'} -> ${x.dest || '?'}`).join(' | ') || 'None')}${admissionDynamic}</div>`;
 
   const infBuiltin = items.filter(i => i.section === 'infection' && i.builtin).map(i => roFr(`${i.label}:`, D.infBeds?.[i.key] || [])).join('');
   const infDynamic = dynamicRows(items, D, i => i.section === 'infection');
@@ -584,7 +596,7 @@ async function getDataForTab(tab) {
   const D = normalizeReportPayload(prev.payload);
   const rows = [];
   if (tab === 1) {
-    rows.push(['Admission E/C', D.admissionEC], ['Admission C/C', D.admissionCC], ['Discharge', D.discharge], ['Death', D.death], ['Transfer In', D.transferIn], ['Transfer Out', D.transferOut], ['Total Patient', D.totalPatientM], ['Empty Bed', D.emptyBeds?.count ?? ''], ['Early Bird', D.earlyBirds.map(x => `${x.bed || '?'}→${x.dest || '?'}`).join(' | ') || 'None']);
+    rows.push(['Admission E/C', D.admissionEC], ['Admission C/C', D.admissionCC], ['Discharge', D.discharge], ['Death', D.death], ['Transfer In', D.transferIn], ['Transfer Out', D.transferOut], ['Total Patient', D.totalPatientM], ['Empty Bed', D.emptyBeds?.count ?? ''], ['Manual M/F/S/D', formatEmptyBedReporting(D.emptyBeds?.reported, { includeMissing: true })], ['Early Bird', D.earlyBirds.map(x => `${x.bed || '?'}→${x.dest || '?'}`).join(' | ') || 'None']);
     state.items.filter(i => !i.builtin && (i.section === 'admission' || i.section === 'bedcount')).forEach(i => rows.push([i.label, formatDynamic(D.dynamicItems?.[i.key])]));
   } else if (tab === 2) {
     state.items.filter(i => i.builtin && i.section === 'infection').forEach(i => rows.push([i.label, (D.infBeds?.[i.key] || []).join(', ') || 'Nil']));

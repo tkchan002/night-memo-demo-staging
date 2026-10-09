@@ -9,6 +9,7 @@ create table if not exists public.wards (
   phone text not null,
   fax text not null,
   empty_bed_gender_mode text not null default 'male' check (empty_bed_gender_mode in ('male','female','mixed','none')),
+  single_double_reporting_enabled boolean not null default false,
   display_order integer not null default 0,
   active boolean not null default true,
   created_at timestamptz not null default now(),
