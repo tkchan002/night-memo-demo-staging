@@ -31,8 +31,8 @@ test('Maintenance controller has no terminology or duplicate-name synchronizatio
   assert.doesNotMatch(page, /installUiTerminology|option\[value=["']dynamic["']\]/);
   assert.doesNotMatch(page, /mWardCode|ward\.code|display_name:\s*wardName/);
   assert.match(page, /validateWardName/);
-  assert.match(page, /createWard\(\{ name: wardName/);
-  assert.match(page, /updateWard\(state\.editingWard\.id, \{ name: wardName/);
+  assert.match(page, /createWard\(\{ \.\.\.settings/);
+  assert.match(page, /saveWardConfiguration\(state\.editingWard\.id, settings, capacity/);
 });
 
 test('ward repository uses name as the only ward identity field', () => {

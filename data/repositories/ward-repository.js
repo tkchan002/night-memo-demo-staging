@@ -3,6 +3,7 @@ import { demoRead, demoWrite, uid } from '../demo-state.js';
 import { dateInRange, defaultReportDate } from '../range.js';
 import { addDaysISO } from '../../core/dates.js';
 import { validateWardName } from '../../domain/ward.js';
+import { capacityNumber, reviseCapacityHistory } from '../../domain/capacity-history.js';
 import { recordAudit } from './audit-repository.js';
 
 export async function getAllWards() {
@@ -160,6 +161,71 @@ export async function updateWard(wardId, patch) {
   if (error) throw error;
   await recordAudit('ward.update', 'ward', wardId, nextPatch);
   return data;
+}
+
+/** Save an existing ward and its effective-dated capacity as one operation.
+ * Supabase uses one transaction in the RPC; demo mutates one state snapshot.
+ * The separate updateWard entry point remains available for legacy callers.
+ */
+export async function saveWardConfiguration(wardId, patch, bedCapacity, options = {}) {
+  const capacity = capacityNumber(bedCapacity);
+  const expectedCapacity = capacityNumber(options.expectedCapacity);
+  const effectiveDate = options.effectiveDate || defaultReportDate();
+  const name = validateWardName(patch.name);
+  const settings = {
+    name,
+    phone: String(patch.phone ?? '').trim(),
+    fax: String(patch.fax ?? '').trim(),
+    empty_bed_gender_mode: patch.empty_bed_gender_mode,
+    single_double_reporting_enabled: patch.single_double_reporting_enabled === true,
+  };
+  if (!['male', 'female', 'mixed', 'none'].includes(settings.empty_bed_gender_mode)) {
+    throw new Error('Invalid empty-bed gender mode.');
+  }
+  if (!/^\d{1,4}$/.test(settings.phone) || !/^\d{1,4}$/.test(settings.fax)) {
+    throw new Error('Phone and Fax must contain 1 to 4 digits.');
+  }
+  if (DB_MODE === 'demo') {
+    const state = demoRead();
+    const ward = state.wards.find(entry => entry.id === wardId);
+    if (!ward) throw new Error('Ward not found.');
+    if (options.expectedUpdatedAt && ward.updated_at !== options.expectedUpdatedAt) {
+      throw new Error('Ward settings were changed by another administrator. Reload Edit Ward.');
+    }
+    assertUniqueDemoWardName(state, settings.name, wardId);
+    const relevant = state.capacity_history.filter(entry => entry.ward_id === wardId);
+    const revision = reviseCapacityHistory(relevant, effectiveDate, capacity, expectedCapacity, () => uid('cap'));
+    const changedSettings = Object.entries(settings).some(([key, value]) => ward[key] !== value);
+    if (!changedSettings && !revision.changed) return ward;
+    const now = new Date().toISOString();
+    const previousSettings = Object.fromEntries(Object.keys(settings).map(key => [key, ward[key]]));
+    if (changedSettings) Object.assign(ward, settings, { updated_at: now });
+    state.capacity_history = state.capacity_history.filter(entry => entry.ward_id !== wardId).concat(revision.rows);
+    if (changedSettings) state.audit_log.unshift({ id: uid('audit'), occurred_at: now, action: 'ward.configuration.update', entity_type: 'ward', entity_id: wardId, details: { before: previousSettings, after: settings } });
+    if (revision.changed) state.audit_log.unshift({ id: uid('audit'), occurred_at: now, action: 'ward.capacity.change', entity_type: 'ward', entity_id: wardId, details: { previous: revision.previous, new: capacity, effective_from: revision.effectiveDate } });
+    demoWrite(state);
+    return ward;
+  }
+  const { error } = await supabase.rpc('save_ward_configuration', {
+    p_ward_id: wardId,
+    p_name: settings.name,
+    p_phone: settings.phone,
+    p_fax: settings.fax,
+    p_gender_mode: settings.empty_bed_gender_mode,
+    p_single_double: settings.single_double_reporting_enabled,
+    p_bed_capacity: capacity,
+    p_expected_capacity: expectedCapacity,
+    p_expected_updated_at: options.expectedUpdatedAt || null,
+    p_effective_date: effectiveDate,
+  });
+  if (error) {
+    const message = `${error.code || ''} ${error.message || ''}`;
+    if (/PGRST202|42883|could not find.*function|function .* does not exist/i.test(message)) {
+      throw new Error('Bed Capacity upgrade is not installed in Supabase. Run the included 20261010_ward_capacity_edit.sql migration first.');
+    }
+    throw error;
+  }
+  return true;
 }
 
 function orderedWardIds(orderedWards) {

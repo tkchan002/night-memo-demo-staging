@@ -1,7 +1,7 @@
 import { requireRole, signOut } from '../auth.js';
 import {
-  getAllWards, getOperatingPeriods, getCapacityHistory, createWard, updateWard, reorderWards,
-  addOperatingPeriod, closeOperatingPeriod, addCapacity, getAccounts, adminAccount,
+  getAllWards, getOperatingPeriods, getCapacityHistory, createWard, reorderWards,
+  addOperatingPeriod, closeOperatingPeriod, saveWardConfiguration, getAccounts, adminAccount,
   getWardStaff, saveWardStaff, setStaffActive, getReportItems, saveReportItem, reorderReportItems, getAuditLog,
   getMaintenanceWardsSnapshot, DB_MODE,
 } from '../data/index.js';
@@ -12,6 +12,7 @@ import { setAppHeader } from '../components/app-shell.js';
 import { initMaintenanceTestData, refreshGeneratedDemoBatches } from './maintenance-test-data.js';
 import { moveOrderedItem, sortByOrder } from '../domain/ordering.js';
 import { emptyBedGenderLabel, validateWardName } from '../domain/ward.js';
+import { editableCapacity, capacityNumber } from '../domain/capacity-history.js';
 
 const $ = qs;
 const state = {
@@ -23,6 +24,9 @@ const state = {
   editingAccount: null,
   editingItem: null,
   editingWard: null,
+  wardModalSequence: 0,
+  capacityAtOpen: null,
+  savingWard: false,
   loaded: { wards: false, accounts: false, items: false },
   loading: {},
 };
@@ -46,9 +50,6 @@ function bind() {
   qsa('[data-close]').forEach(b => { b.onclick = () => closeModal(b.dataset.close); });
   $('#addWardBtn').onclick = () => openWardModal();
   $('#wardFormModal').onsubmit = saveWardFromModal;
-  $('#capacityWard').onchange = renderCapacityHistory;
-  $('#addCapacityBtn').onclick = () => openModal('#capacityModal');
-  $('#capacityForm').onsubmit = saveCapacity;
   $('#addAccountBtn').onclick = () => openAccountModal();
   $('#accountForm').onsubmit = saveAccount;
   $('#passwordForm').onsubmit = savePassword;
@@ -64,7 +65,6 @@ async function showPage(name) {
   qsa('[data-maint-page]').forEach(x => x.classList.toggle('active', x.dataset.maintPage === name));
   try {
     if (name === 'wards') await ensureWardsLoaded();
-    if (name === 'capacity') { await ensureWardsLoaded(); await renderCapacityHistory(); }
     if (name === 'accounts') { await ensureWardsLoaded(); await ensureAccountsLoaded(); }
     if (name === 'staff') { await ensureWardsLoaded(); await renderMaintStaff(); }
     if (name === 'items') await ensureItemsLoaded();
@@ -77,7 +77,13 @@ async function showPage(name) {
 }
 
 function openModal(sel) { $(sel).classList.add('show'); }
-function closeModal(sel) { $(sel).classList.remove('show'); }
+function closeModal(sel) {
+  if (sel === '#wardModal') {
+    if (state.savingWard) return;
+    state.wardModalSequence++;
+  }
+  $(sel).classList.remove('show');
+}
 
 async function ensureWardsLoaded(force = false) {
   if (state.loaded.wards && !force) return;
@@ -124,11 +130,10 @@ async function ensureItemsLoaded(force = false) {
 
 function fillWardSelects() {
   const opts = '<option value="">— None —</option>' + state.wards.map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`).join('');
-  ['#capacityWard', '#staffWard', '#accountWard'].forEach(sel => {
+  ['#staffWard', '#accountWard'].forEach(sel => {
     const el = $(sel), old = el.value; el.innerHTML = opts;
     if ([...el.options].some(o => o.value === old)) el.value = old;
   });
-  if (!$('#capacityWard').value && state.wards[0]) $('#capacityWard').value = state.wards[0].id;
   if (!$('#staffWard').value && state.wards[0]) $('#staffWard').value = state.wards[0].id;
 }
 
@@ -191,29 +196,97 @@ async function refreshWardConfiguration() {
   await ensureWardsLoaded(true);
 }
 
-function openWardModal(w = null) {
+function initializeCapacityOptions() {
+  const select = $('#mWardCapacity');
+  if (select.options.length) return;
+  const options = document.createDocumentFragment();
+  for (let beds = 0; beds <= 500; beds++) {
+    const option = document.createElement('option');
+    option.value = String(beds);
+    option.textContent = String(beds);
+    options.append(option);
+  }
+  select.append(options);
+}
+
+async function openWardModal(w = null) {
+  if (state.savingWard) return;
+  const requestId = ++state.wardModalSequence;
   state.editingWard = w;
+  state.capacityAtOpen = null;
+  initializeCapacityOptions();
   $('#wardModalTitle').textContent = w ? 'Edit Ward' : 'Add Ward';
-  $('#editWardId').value = w?.id || ''; $('#mWardName').value = w?.name || '';
-  $('#mWardPhone').value = w?.phone || ''; $('#mWardFax').value = w?.fax || ''; $('#mWardGender').value = w?.empty_bed_gender_mode || 'male';
+  $('#editWardId').value = w?.id || '';
+  $('#mWardName').value = w?.name || '';
+  $('#mWardPhone').value = w?.phone || '';
+  $('#mWardFax').value = w?.fax || '';
+  $('#mWardGender').value = w?.empty_bed_gender_mode || 'male';
   $('#mWardSingleDouble').checked = w?.single_double_reporting_enabled === true;
   $('#mWardStart').value = todayISO();
-  $('#mWardEnd').value = ''; $('#mWardCapacity').value = '40'; $('#mWardNote').value = '';
-  qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w)); openModal('#wardModal');
+  $('#mWardEnd').value = '';
+  $('#mWardNote').value = '';
+  $('#mWardCapacity').value = w ? '' : '40';
+  const save = $('#wardFormModal button[type="submit"]');
+  save.disabled = !!w;
+  $('#mWardCapacity').disabled = !!w;
+  qsa('.new-ward-only').forEach(x => x.classList.toggle('hidden', !!w));
+  qsa('.edit-ward-only').forEach(x => x.classList.toggle('hidden', !w));
+  $('#wardCapacityHistory').innerHTML = '';
+  openModal('#wardModal');
+  if (!w) return;
+  try {
+    const rows = await getCapacityHistory(w.id);
+    if (requestId !== state.wardModalSequence || !$('#wardModal').classList.contains('show')) return;
+    const chosen = editableCapacity(rows, todayISO());
+    state.capacityAtOpen = { value: Number(chosen.row.bed_capacity), updatedAt: w.updated_at || null };
+    $('#mWardCapacity').value = String(chosen.row.bed_capacity);
+    $('#wardCapacityHistory').innerHTML = `<table class="data-table"><thead><tr><th>Effective From</th><th>Effective To</th><th>Beds</th></tr></thead><tbody>${rows.map(row => `<tr><td>${esc(toDisplayDate(row.effective_from))}</td><td>${esc(row.effective_to ? toDisplayDate(row.effective_to) : 'Current')}</td><td>${esc(row.bed_capacity)}</td></tr>`).join('')}</tbody></table>`;
+    $('#mWardCapacity').disabled = false;
+    save.disabled = false;
+  } catch (error) {
+    if (requestId === state.wardModalSequence) flash(error.message || String(error), 'error', 7000);
+  }
 }
+
 async function saveWardFromModal(event) {
   event.preventDefault();
+  const save = $('#wardFormModal button[type="submit"]');
+  if (save.disabled) return;
+  save.disabled = true;
+  state.savingWard = true;
   try {
     const wardName = validateWardName($('#mWardName').value);
+    const capacity = capacityNumber($('#mWardCapacity').value);
+    const settings = {
+      name: wardName,
+      phone: $('#mWardPhone').value.trim(),
+      fax: $('#mWardFax').value.trim(),
+      empty_bed_gender_mode: $('#mWardGender').value,
+      single_double_reporting_enabled: $('#mWardSingleDouble').checked,
+    };
     if (state.editingWard) {
-      await updateWard(state.editingWard.id, { name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, single_double_reporting_enabled: $('#mWardSingleDouble').checked });
-      flash('Ward updated.', 'success');
+      if (!state.capacityAtOpen) throw new Error('Bed capacity has not loaded. Reopen Edit Ward.');
+      await saveWardConfiguration(state.editingWard.id, settings, capacity, {
+        expectedCapacity: state.capacityAtOpen.value,
+        expectedUpdatedAt: state.capacityAtOpen.updatedAt,
+        effectiveDate: todayISO(),
+      });
+      flash('Ward and bed capacity saved.', 'success');
     } else {
-      await createWard({ name: wardName, phone: $('#mWardPhone').value.trim(), fax: $('#mWardFax').value.trim(), empty_bed_gender_mode: $('#mWardGender').value, single_double_reporting_enabled: $('#mWardSingleDouble').checked, start_date: $('#mWardStart').value, end_date: $('#mWardEnd').value || null, bed_capacity: $('#mWardCapacity').value, note: $('#mWardNote').value.trim() });
+      await createWard({ ...settings, start_date: $('#mWardStart').value,
+        end_date: $('#mWardEnd').value || null, bed_capacity: capacity,
+        note: $('#mWardNote').value.trim() });
       flash('Ward created. Create its login account in Accounts.', 'success', 6000);
     }
-    closeModal('#wardModal'); await refreshWardConfiguration();
-  } catch (error) { flash(error.message || String(error), 'error', 7000); }
+    state.savingWard = false;
+    closeModal('#wardModal');
+    await refreshWardConfiguration();
+  } catch (error) {
+    flash(error.message || String(error), 'error', 7000);
+  } finally {
+    state.savingWard = false;
+    if ($('#wardModal').classList.contains('show') && (!state.editingWard || state.capacityAtOpen)) save.disabled = false;
+  }
 }
 async function closeWard(wardId) {
   const date = prompt('Closing date (YYYY-MM-DD):', todayISO()); if (!date) return;
@@ -222,12 +295,6 @@ async function closeWard(wardId) {
   await closeOperatingPeriod(open.id, date, 'Ward closed from maintenance console'); flash('Ward operating period closed.', 'success'); await refreshWardConfiguration();
 }
 async function reopenWard(wardId) { const date = prompt('Reopening date (YYYY-MM-DD):', todayISO()); if (!date) return; await addOperatingPeriod(wardId, date, null, 'Ward reopened from maintenance console'); flash('Ward reopened.', 'success'); await refreshWardConfiguration(); }
-async function renderCapacityHistory() {
-  const wardId = $('#capacityWard').value; if (!wardId) { $('#capacityHistory').innerHTML = ''; return; }
-  const rows = await getCapacityHistory(wardId);
-  $('#capacityHistory').innerHTML = `<table class="data-table"><thead><tr><th>Effective From</th><th>Effective To</th><th>Beds</th><th>Note</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(toDisplayDate(r.effective_from))}</td><td>${esc(r.effective_to ? toDisplayDate(r.effective_to) : 'Current')}</td><td>${esc(r.bed_capacity)}</td><td>${esc(r.note || '')}</td></tr>`).join('')}</tbody></table>`;
-}
-async function saveCapacity(event) { event.preventDefault(); const wardId = $('#capacityWard').value; if (!wardId) return; try { await addCapacity(wardId, $('#capFrom').value, $('#capBeds').value, $('#capNote').value.trim()); closeModal('#capacityModal'); flash('Capacity change saved with effective date.', 'success'); await renderCapacityHistory(); } catch (error) { flash(error.message || String(error), 'error'); } }
 function renderAccounts() {
   $('#accountRows').innerHTML = state.accounts.map(a => `<tr><td>${esc(a.login_id)}</td><td>${esc(a.role)}</td><td>${esc(a.wards?.name || '—')}</td><td>${a.active ? '<span class="tag">Active</span>' : '<span class="tag subtle">Disabled</span>'}</td><td><div class="inline-actions"><button class="btn secondary small" data-edit-account="${esc(a.auth_user_id)}">Edit</button><button class="btn secondary small" data-password="${esc(a.auth_user_id)}">Reset Password</button></div></td></tr>`).join('');
   qsa('[data-edit-account]').forEach(b => { b.onclick = () => openAccountModal(state.accounts.find(a => a.auth_user_id === b.dataset.editAccount)); });
