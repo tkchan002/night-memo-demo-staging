@@ -1,3 +1,4 @@
+import { openPrintView } from '../services/print-job-service.js';
 import { qs, esc } from '../core/dom.js';
 import { formatDateTime } from '../core/dates.js';
 import { getWardsForDate } from '../data/repositories/ward-repository.js';
@@ -102,20 +103,7 @@ function printNightRunners() {
 }
 
 function showRosterPrint(html, title) {
-  const modal = $('#printPreviewModal');
-  const frame = $('#printPreviewFrame');
-  const heading = $('#printPreviewTitle');
-  if (!modal || !frame || !heading) return;
-  heading.textContent = title;
-  modal.hidden = false;
-  frame.onload = () => {
-    frame.onload = null;
-    setTimeout(() => {
-      frame.contentWindow?.focus();
-      frame.contentWindow?.print();
-    }, 80);
-  };
-  frame.srcdoc = html;
+  openPrintView({ html, title, kind: 'night-roster' });
 }
 
 function showError(error) {

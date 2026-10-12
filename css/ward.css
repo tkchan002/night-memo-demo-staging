@@ -503,3 +503,17 @@
 #logoutBtn{min-width:100px}
 #liveIndicator{font-size:11px;color:#666;text-align:right;padding:3px 8px 0}
 @media print{#appWrapper,.btn-bar,#statusBox,#gdOverlay,#pdfSettingsModal{display:none!important}}
+
+/* PM/Night beta: same native Ward form controls and hospital-approved palette. */
+.sex-admission{display:inline-flex;align-items:center;flex-wrap:wrap;gap:10px;}
+.sex-admission label{display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap;}
+#memoType{min-width:120px;}
+.empty-detail-row>.fc{gap:5px 8px;min-width:0;}
+.empty-detail-row [data-empty-remark]{max-width:100%;min-width:130px;}
+.empty-detail-row [data-empty-custom]{max-width:100%;min-width:110px;}
+@media(max-width:600px){
+  .sex-admission{gap:8px 14px;}
+  .empty-detail-row>.fc{width:100%;}
+  .empty-detail-row [data-empty-remark]{flex:1 1 140px;width:auto;}
+  .empty-detail-row [data-empty-custom]{flex:1 1 120px;width:auto;}
+}

@@ -9,7 +9,7 @@ const ward = await readFile(new URL('../pages/ward-page.js', import.meta.url), '
 test('Ward displays three separate labelled controls without hint or placeholder text', () => {
   assert.match(html, /Optional Bed \/ Location Remarks/);
   assert.match(html, /<span style="width:70px">Number<\/span>/);
-  assert.match(html, /<span style="width:80px">M\/F\/S\/D<\/span>/);
+  assert.match(html, /<span style="width:80px">M\/F\/S\/D\/T\/Other<\/span>/);
   assert.match(html, /<span>Remarks<\/span>/);
   assert.doesNotMatch(html, /Enter 1M, 1F, 1S or 1D/);
   assert.doesNotMatch(html, /emptyBedDesignationSuggestions/);
@@ -25,13 +25,13 @@ test('number select includes capacity range and preserves previously stored larg
   assert.match(ward, /for \(let number = 1; number <= maxNumber; number \+= 1\)/);
   assert.match(ward, /\$\('\[data-empty-quantity\]', row\)\.value = savedNumber/);
   assert.match(ward, /quantity: number \? Number\(number\) : null/);
-  assert.match(ward, /if \(!number && !designation && !remark\) return null/);
+  assert.match(ward, /if \(!number && !designation && !remark && !customDesignation\) return null/);
 });
 
 test('S/D options obey maintenance toggle and preserve historical selections', () => {
   assert.match(ward, /single_double_reporting_enabled === true/);
-  assert.match(ward, /enabled \? \['M', 'F', 'S', 'D'\] : \['M', 'F'\]/);
-  assert.match(ward, /if \(\['S', 'D'\]\.includes\(savedCode\)/);
+  assert.match(ward, /enabled \? \['M', 'F', 'S', 'D', 'T', 'OTHER'\] : \['M', 'F'\]/);
+  assert.match(ward, /if \(\['S', 'D', 'T', 'OTHER'\]\.includes\(savedCode\)/);
 });
 
 test('independent entries still format with optional remarks and duplicates', () => {
@@ -44,4 +44,15 @@ test('independent entries still format with optional remarks and duplicates', ()
   assert.deepEqual(validateEmptyBedEntries(entries), []);
   assert.equal(formatEmptyBedEntries(entries), '1M (TB), 1M (HZV), 1S, 1D');
   assert.ok(validateEmptyBedEntries([{ quantity: null, designation: 'M', remark: 'TB' }]).length);
+});
+
+test('T and user-defined designations are preserved with independent free-text remarks', () => {
+  const entries = [
+    { quantity: 2, designation: 'T', remark: 'Special request' },
+    { quantity: 3, designation: 'OTHER', customDesignation: 'ISO', remark: 'TB' },
+  ];
+  assert.deepEqual(validateEmptyBedEntries(entries), []);
+  assert.equal(formatEmptyBedEntries(entries), '2T (Special request), 3ISO (TB)');
+  assert.ok(validateEmptyBedEntries([{ quantity: 1, designation: 'OTHER', customDesignation: '' }]).length);
+  assert.match(ward, /data-empty-custom/);
 });

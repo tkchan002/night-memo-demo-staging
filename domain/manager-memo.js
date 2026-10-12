@@ -1,21 +1,10 @@
 import { addDaysISO, todayISO, toDisplayDate, REPORT_TIME_ZONE } from '../core/dates.js';
 import { deviceCount, normalizeDevice, normalizeReportPayload } from './report-model.js';
 import { reportSubmittedAt } from './report-session.js';
+import { reportNightDate, combinedMovementValue, missingMemoTypes } from './report-cycle.js';
 import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './empty-bed-reporting.js';
 
-function hktHour(now = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: REPORT_TIME_ZONE,
-    hour: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  return Number(parts.find(part => part.type === 'hour')?.value || 0);
-}
-
-export function reportingNightDate(now = new Date()) {
-  const date = todayISO(REPORT_TIME_ZONE, now);
-  return hktHour(now) < 12 ? addDaysISO(date, -1) : date;
-}
+export function reportingNightDate(now = new Date()) { return reportNightDate(now); }
 
 export function managerSubmissionStatus(report) {
   if (!report) return { state: 'missing', label: 'Not submitted', time: '' };
@@ -88,15 +77,20 @@ function deviceSummary(value) {
 }
 
 export function sourceSnapshotFromBundle(bundle = []) {
-  return bundle
-    .filter(entry => entry?.report)
-    .map(entry => ({
-      ward_id: entry.ward?.id || entry.report?.ward_id || '',
-      ward_name: entry.ward?.name || '',
-      report_id: entry.report?.id || '',
-      submitted_at: reportSubmittedAt(entry.report) || '',
-    }))
-    .sort((a, b) => String(a.ward_name).localeCompare(String(b.ward_name)));
+  const result = [];
+  for (const entry of bundle) {
+    // Previous historical bundles contain only entry.report. Preserve their
+    // identity rather than rewriting old records into PM/Night categories.
+    const sources = Object.hasOwn(entry, 'pmReport') || Object.hasOwn(entry, 'nightReport')
+      ? [['pm', entry.pmReport], ['night', entry.nightReport]] : [['legacy', entry.report]];
+    for (const [memo_type, report] of sources) {
+      if (!report) continue;
+      result.push({ ward_id: entry.ward?.id || report.ward_id,
+        ward_name: entry.ward?.name || '', memo_type,
+        report_id: report.id, submitted_at: reportSubmittedAt(report) || '' });
+    }
+  }
+  return result.sort((a, b) => `${a.ward_id}:${a.memo_type}`.localeCompare(`${b.ward_id}:${b.memo_type}`));
 }
 
 export function isReportNewerThanSource(report, source) {
@@ -111,22 +105,25 @@ export function isReportNewerThanSource(report, source) {
 
 export function sourceSnapshotSignature(snapshot = []) {
   return [...(snapshot || [])]
-    .sort((a, b) => String(a.ward_id).localeCompare(String(b.ward_id)))
-    .map(row => `${row.ward_id}:${row.report_id}:${row.submitted_at}`)
+    .sort((a, b) => `${a.ward_id}:${a.memo_type || 'legacy'}`.localeCompare(`${b.ward_id}:${b.memo_type || 'legacy'}`))
+    .map(row => `${row.ward_id}:${row.memo_type || 'legacy'}:${row.report_id}:${row.submitted_at}`)
     .join('|');
 }
 
 function mainRow(entry) {
-  const { ward, report, capacity } = entry;
+  const { ward, report, capacity, pmReport, nightReport } = entry;
+  const typed = Object.hasOwn(entry, 'pmReport') || Object.hasOwn(entry, 'nightReport');
+  const primary = typed ? pmReport : report;
+  const secondary = typed ? nightReport : null;
   const D = report ? normalizeReportPayload(report.payload) : {};
   return {
     ward: ward?.name || '',
-    admissionEC: report ? String(D.admissionEC ?? '') : '',
-    admissionCC: report ? String(D.admissionCC ?? '') : '',
-    transferIn: report ? String(D.transferIn ?? '') : '',
-    discharge: report ? String(D.discharge ?? '') : '',
-    transferOut: report ? String(D.transferOut ?? '') : '',
-    death: report ? String(D.death ?? '') : '',
+    admissionEC: combinedMovementValue(primary, secondary, 'admissionEC'),
+    admissionCC: combinedMovementValue(primary, secondary, 'admissionCC'),
+    transferIn: combinedMovementValue(primary, secondary, 'transferIn'),
+    discharge: combinedMovementValue(primary, secondary, 'discharge'),
+    transferOut: combinedMovementValue(primary, secondary, 'transferOut'),
+    death: combinedMovementValue(primary, secondary, 'death'),
     totalPatient: report ? String(D.totalPatientM ?? '') : '',
     emptyBed: report ? formatManagerEmptyBeds(ward, report, capacity) : '',
     ventilator: report ? String(deviceCount(D.devBeds?.dMV) || 0) : '',
@@ -189,6 +186,7 @@ export function buildManagerMemoDocument({ bundle = [], items = [], reportingDat
     infectionRows: bundle.map(infectionRow),
     earlyBirdHtml: linesToHtml(earlyBirdLines(bundle)),
     emptyBedHtml: linesToHtml(emptyBedLines(bundle)),
+    additionalReportHtml: '<div><br></div>',
     ct: {
       total: '',
       maleGeneral: '',

@@ -14,7 +14,8 @@ import {
 } from '../domain/report-model.js';
 import { legacyEmptyBedEntries, formatEmptyBedEntries } from '../domain/empty-bed-reporting.js';
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
-import { SUBMISSION_WINDOW_MINUTES } from '../domain/report-session.js';
+import { reportNightDate, defaultMemoType, MEMO_LABELS } from '../domain/report-cycle.js';
+import { openPrintView } from '../services/print-job-service.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -23,7 +24,7 @@ const wardTabs = initWardTabs();
 const INF_MAP = { iCRE: 'i_CRE', iVRE: 'i_VRE', iCOV: 'i_COVID', iMDR: 'i_MDRA', iCD: 'i_CD', iInf: 'i_Inf', iCA: 'i_CA' };
 const DEV_MAP = { dMV: 'd_MV', dNIV: 'd_NIV', dHF: 'd_HFNC', dHD: 'd_HD', dCA: 'd_CAPD' };
 const FALLBACK_WARD_PRINT_SETTINGS = Object.freeze({ topTitle: 19, topContent: 13, boxTitle: 15, boxContent: 12, lineHeader: 9, lineContent: 11, consHeader: 10, consContent: 10, intubHeader: 9, intubContent: 10, nurseTitle: 9, nurseContent: 11, sigContent: 11, infLabel: 12, infValue: 12, devLabel: 12, devValue: 12 });
-const state = { access: null, ward: null, capacity: 0, items: [], allItems: [], staff: [], report: null, draft: null, submissionStatus: null, history: [], currentHist: null, operational: true, historyMode: false, staffMode: false, gdTab: null, gdPrev: null, loadedDate: null, dirty: false, saving: false, submitting: false };
+const state = { access: null, ward: null, capacity: 0, items: [], allItems: [], staff: [], report: null, draft: null, submissionStatus: null, memoType: 'night', history: [], currentHist: null, operational: true, historyMode: false, staffMode: false, gdTab: null, gdPrev: null, loadedDate: null, dirty: false, saving: false, submitting: false };
 let printModulePromise = null;
 let nurseCounter = 0;
 let pdfSettings = { ...FALLBACK_WARD_PRINT_SETTINGS };
@@ -71,45 +72,53 @@ function setupSubmissionUi() {
     const banner = document.createElement('div');
     banner.id = 'submissionBanner';
     banner.className = 'submission-banner pending';
-    banner.innerHTML = '<strong>Current memo cycle:</strong> Checking submission status...';
+    banner.innerHTML = '<strong>Selected memo:</strong> Checking submission status...';
     const indicator = $('#liveIndicator');
     indicator?.insertAdjacentElement('afterend', banner);
   }
-}
-
-function isSubmissionCurrent(iso) {
-  const when = iso ? new Date(iso).getTime() : NaN;
-  return Number.isFinite(when) && Date.now() - when <= SUBMISSION_WINDOW_MINUTES * 60_000;
 }
 
 function renderSubmissionBanner() {
   const banner = $('#submissionBanner');
   if (!banner) return;
   const last = state.submissionStatus?.last_submitted_at || null;
-  const current = isSubmissionCurrent(last);
+  const current = !!state.submissionStatus?.submitted;
+  const typeLabel = MEMO_LABELS[state.memoType];
   banner.className = `submission-banner ${current ? 'submitted' : 'pending'}`;
   const draftNotice = state.draft ? ' · Draft changes pending re-submit' : '';
-  if (current) {
-    banner.innerHTML = `<strong>Current memo cycle: Submitted</strong><span>Last submitted ${esc(formatDateTime(last))}${draftNotice}</span>`;
-  } else if (last) {
-    banner.innerHTML = `<strong>Current memo cycle: Not submitted</strong><span>Last submission ${esc(formatDateTime(last))}</span>`;
-  } else {
-    banner.innerHTML = '<strong>Current memo cycle: Not submitted</strong><span>No previous submission found</span>';
-  }
+  banner.innerHTML = current
+    ? `<strong>${esc(typeLabel)}: Submitted</strong><span>${esc(toDisplayDate(state.loadedDate))} · ${esc(formatDateTime(last))}${draftNotice}</span>`
+    : `<strong>${esc(typeLabel)}: Not submitted</strong><span>${state.draft ? 'Draft saved but not submitted' : 'No submission for this reporting night'}</span>`;
 }
 
 async function refreshSubmissionBanner() {
+  const date = $('#memoDate').value;
+  const type = state.memoType;
   try {
-    state.submissionStatus = await loadWardSubmissionStatus(state.ward.id, SUBMISSION_WINDOW_MINUTES);
+    const value = await loadWardSubmissionStatus(state.ward.id, date, type);
+    if ($('#memoDate').value !== date || state.memoType !== type) return;
+    state.submissionStatus = value;
     renderSubmissionBanner();
   } catch (error) {
     console.error('Unable to load submission status', error);
     const banner = $('#submissionBanner');
     if (banner) {
       banner.className = 'submission-banner unknown';
-      banner.innerHTML = '<strong>Submission status unavailable</strong><span>Use Submit to send the memo to Manager.</span>';
+      banner.innerHTML = '<strong>Submission status unavailable</strong><span>Check the PM/Night database migration.</span>';
     }
   }
+}
+
+async function handleMemoTypeChange() {
+  const select = $('#memoType');
+  const next = select.value;
+  if (next === state.memoType) return;
+  if (state.dirty && !confirm('You have unsaved changes. Discard them and switch memo type?')) {
+    select.value = state.memoType; return;
+  }
+  state.memoType = next;
+  await loadForDate($('#memoDate').value);
+  await refreshSubmissionBanner();
 }
 
 async function init() {
@@ -120,7 +129,10 @@ async function init() {
   $('#wardFrom').textContent = state.ward.name;
   $('#wardContact').innerHTML = `Ext ${esc(state.ward.phone || '—')} &nbsp;&nbsp;&nbsp;<b>Fax:</b> Ext ${esc(state.ward.fax || '—')}`;
   $('#liveIndicator').textContent = DB_MODE === 'demo' ? 'Local demo mode' : 'Supabase live';
-  $('#memoDate').value = todayISO();
+  state.memoType = defaultMemoType();
+  $('#memoType').value = state.memoType;
+  $('#memoType').addEventListener('change', handleMemoTypeChange);
+  $('#memoDate').value = reportNightDate();
   $('#memoDate').addEventListener('change', handleDateChange);
   $('#logoutBtn').addEventListener('click', signOut);
   $('#sigName').addEventListener('input', () => autofillSignature($('#sigName').value));
@@ -133,7 +145,7 @@ async function init() {
   window.addEventListener('beforeunload', event => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
   await loadForDate($('#memoDate').value);
   await refreshSubmissionBanner();
-  setInterval(renderSubmissionBanner, 60_000);
+  // Status belongs to the selected reporting night and memo type, not a 120-minute timer.
 }
 
 function markDirty() { if (state.loadedDate) state.dirty = true; }
@@ -145,6 +157,7 @@ async function handleDateChange() {
     return;
   }
   await loadForDate(next);
+  await refreshSubmissionBanner();
 }
 
 function showStatus(type, msg) {
@@ -169,7 +182,7 @@ async function loadForDate(date) {
   showStatus('loading', 'Loading ward data...');
   disableSave(true);
   try {
-    const result = await loadWardReportContext(state.ward.id, date);
+    const result = await loadWardReportContext(state.ward.id, date, state.memoType);
     if (!loadRequests.isCurrent(requestId)) return;
     Object.assign(state, result, { loadedDate: date, dirty: false });
     buildControls();
@@ -177,7 +190,7 @@ async function loadForDate(date) {
     renderStaffDataLists();
     if (!state.operational) showStatus('error', `${state.ward.name} is not operational on ${toDisplayDate(date)}. Saving is disabled for this date.`);
     else if (state.draft) showStatus('success', `Loaded saved draft for ${toDisplayDate(date)}. This draft has not been submitted.`);
-    else if (state.report) showStatus('success', `Loaded current-cycle submitted memo for ${toDisplayDate(date)}.`);
+    else if (state.report) showStatus('success', `Loaded submitted ${MEMO_LABELS[state.memoType]} for ${toDisplayDate(date)}.`);
     else showStatus('success', `Ready for ${toDisplayDate(date)}. Previous submissions are available through Get Data or History.`);
   } catch (error) {
     if (!loadRequests.isCurrent(requestId)) return;
@@ -195,6 +208,9 @@ function disableSave(on) {
 
 function buildControls() {
   DIRECT_REPORT_KEYS.slice(0, 6).forEach(key => populateSelect(key, itemByKey(key)));
+  ['admissionEC', 'admissionCC', 'transferIn'].forEach(key => {
+    ['M', 'F'].forEach(sex => populateSelect(`${key}_${sex}`, itemByKey(key)));
+  });
   Object.entries(INF_MAP).forEach(([key, id]) => makeBedWidget(id, key));
   Object.entries(DEV_MAP).forEach(([key, id]) => makeDeviceWidget(id, key));
   renderDynamicItems();
@@ -208,6 +224,7 @@ function populateSelect(id, item) {
   const opts = optionsOf(item).length ? optionsOf(item) : Array.from({ length: 31 }, (_, i) => String(i));
   el.innerHTML = opts.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
   if (opts.includes(old)) el.value = old;
+  else if (old && !opts.includes(old) && /^\d+$/.test(old)) { el.add(new Option(old, old)); el.value = old; }
 }
 
 function makeBedWidget(containerId, key) {
@@ -301,13 +318,18 @@ function addEmptyDetail(value = {}) {
   }
   const designationOptions = ['<option value=""></option>'];
   const enabled = state.ward?.single_double_reporting_enabled === true;
-  const availableCodes = enabled ? ['M', 'F', 'S', 'D'] : ['M', 'F'];
+  const availableCodes = enabled ? ['M', 'F', 'S', 'D', 'T', 'OTHER'] : ['M', 'F'];
   // Retain previously recorded categories when showing a historical report.
-  if (['S', 'D'].includes(savedCode) && !availableCodes.includes(savedCode)) availableCodes.push(savedCode);
-  for (const code of availableCodes) designationOptions.push(`<option value="${code}">${code}</option>`);
-  row.innerHTML = `<span class="fc"><select data-empty-quantity style="width:70px" aria-label="Empty bed number">${numberOptions.join('')}</select><select data-empty-designation style="width:80px" aria-label="Empty bed M, F, S or D">${designationOptions.join('')}</select><input type="text" class="w280" data-empty-remark aria-label="Empty bed remarks" value="${esc(value.remark || '')}"><button class="btn-x" type="button" aria-label="Remove empty bed entry">x</button></span>`;
+  if (['S', 'D', 'T', 'OTHER'].includes(savedCode) && !availableCodes.includes(savedCode)) availableCodes.push(savedCode);
+  for (const code of availableCodes) designationOptions.push(`<option value="${code}">${code === 'OTHER' ? 'Other' : code}</option>`);
+  row.innerHTML = `<span class="fc"><select data-empty-quantity style="width:70px" aria-label="Empty bed number">${numberOptions.join('')}</select><select data-empty-designation style="width:80px" aria-label="Empty bed type">${designationOptions.join('')}</select><input type="text" class="w280" data-empty-custom aria-label="Custom designation" style="display:none;width:140px" value="${esc(value.customDesignation || '')}"><input type="text" class="w280" data-empty-remark aria-label="Empty bed remarks" value="${esc(value.remark || '')}"><button class="btn-x" type="button" aria-label="Remove empty bed entry">x</button></span>`;
   $('[data-empty-quantity]', row).value = savedNumber;
   $('[data-empty-designation]', row).value = savedCode;
+  const designationSelect = $('[data-empty-designation]', row);
+  const customInput = $('[data-empty-custom]', row);
+  const syncCustom = () => { customInput.style.display = designationSelect.value === 'OTHER' ? '' : 'none'; };
+  designationSelect.addEventListener('change', syncCustom);
+  syncCustom();
   $('.btn-x', row).onclick = () => { row.remove(); markDirty(); };
   $('#emptyDetailRows').append(row);
   markDirty();
@@ -317,8 +339,9 @@ function collectEmptyDetails() {
     const number = $('[data-empty-quantity]', row).value;
     const designation = $('[data-empty-designation]', row).value;
     const remark = $('[data-empty-remark]', row).value.trim();
-    if (!number && !designation && !remark) return null;
-    return { quantity: number ? Number(number) : null, designation, remark };
+    const customDesignation = $('[data-empty-custom]', row).value.trim();
+    if (!number && !designation && !remark && !customDesignation) return null;
+    return { quantity: number ? Number(number) : null, designation, customDesignation, remark };
   }).filter(Boolean);
 }
 function addEB(bed = '', dest = '') { const row = document.createElement('div'); row.className = 'fr'; row.style.marginBottom = '4px'; let options = '<option value="">--</option>'; for (let i = 1; i <= bedCeiling(); i += 1) options += `<option value="${i}" ${String(bed) === String(i) ? 'selected' : ''}>${i}</option>`; row.innerHTML = `<select class="eB" style="width:70px">${options}</select><span style="padding:0 8px;font-size:1rem;font-weight:700">--&gt;</span><input type="text" class="eD" style="width:150px" placeholder="e.g. KH3A" value="${esc(dest || '')}"><button class="btn-x" type="button" style="margin-left:6px">x</button>`; $('.btn-x', row).onclick = () => { row.remove(); markDirty(); }; $('#ebRows').append(row); }
@@ -340,6 +363,12 @@ function fillPayload(raw) {
   const D = normalizeReportPayload(raw);
   state.dirty = false;
   DIRECT_REPORT_KEYS.forEach(key => { if ($(`#${key}`)) $(`#${key}`).value = D[key] ?? (key === 'totalPatientM' ? '' : '0'); });
+  ['admissionEC', 'admissionCC', 'transferIn'].forEach(key => {
+    for (const sex of ['M','F']) {
+      const value = D.admissionBySex?.[key]?.[sex] ?? 0;
+      $(`#${key}_${sex}`).value = String(value);
+    }
+  });
   Object.keys(INF_MAP).forEach(key => setBeds(key, D.infBeds?.[key] || []));
   Object.keys(DEV_MAP).forEach(key => setDeviceValue(key, D.devBeds?.[key]));
   state.items.filter(i => !i.builtin).forEach(i => setDynamicValue(i, D.dynamicItems?.[i.key]));
@@ -383,11 +412,18 @@ function collectPayload() {
   D.devBeds = {};
   D.dynamicItems = {};
   DIRECT_REPORT_KEYS.forEach(key => { D[key] = $(`#${key}`)?.value ?? ''; });
+  D.admissionBySex = {};
+  ['admissionEC', 'admissionCC', 'transferIn'].forEach(key => {
+    const M = Number($(`#${key}_M`).value) || 0;
+    const F = Number($(`#${key}_F`).value) || 0;
+    D.admissionBySex[key] = { M, F };
+    D[key] = String(M + F);
+  });
   Object.keys(INF_MAP).forEach(key => { D.infBeds[key] = getBeds(key); });
   Object.keys(DEV_MAP).forEach(key => { D.devBeds[key] = getDeviceValue(key); });
   state.items.filter(i => !i.builtin).forEach(i => { D.dynamicItems[i.key] = getDynamicValue(i); });
   const entries = collectEmptyDetails();
-  if (state.ward?.single_double_reporting_enabled !== true && entries.some(entry => ['S','D'].includes(entry.designation))) {
+  if (state.ward?.single_double_reporting_enabled !== true && entries.some(entry => ['S','D','T','OTHER'].includes(entry.designation))) {
     throw new Error('S/D reporting is disabled for this ward in Maintenance. Remove these entries or ask Maintenance to enable it.');
   }
   D.emptyBeds = { count: calcEmpty(), version: 2, entries };
@@ -417,6 +453,7 @@ async function saveEntry() {
   showStatus('loading', 'Saving draft...');
   try {
     const { draft, warnings } = await saveWardDraft({
+      memoType: state.memoType,
       wardId: state.ward.id,
       date,
       editedPayload: collectPayload(),
@@ -444,12 +481,13 @@ async function submitEntry() {
   if (!state.operational) { showStatus('error', 'This ward is not operational on the selected date.'); return null; }
   const date = $('#memoDate').value;
   if (!date || date !== state.loadedDate) { showStatus('error', 'Wait for the selected date to finish loading before submitting.'); return null; }
-  if (!confirm('Submit this memo to Manager now? Saved drafts are not visible to Manager until you submit.')) return null;
+  if (!confirm(`Submit ${MEMO_LABELS[state.memoType]} for ${toDisplayDate(date)} to Manager? Saved drafts are not visible until submitted.`)) return null;
   state.submitting = true;
   disableSave(true);
   showStatus('loading', 'Submitting memo...');
   try {
     const { report, warnings } = await submitWardReport({
+      memoType: state.memoType,
       wardId: state.ward.id,
       date,
       editedPayload: collectPayload(),
@@ -486,7 +524,7 @@ async function refreshHistory() {
   state.history.forEach(report => {
     const entry = document.createElement('div');
     entry.className = 'hist-entry' + (state.currentHist?.id === report.id ? ' selected' : '');
-    entry.innerHTML = `<div class="he-body"><span class="he-date">${esc(toDisplayDate(report.report_date))}</span><span class="he-sub">${esc(report.updated_at ? formatDateTime(report.updated_at) : '')}</span></div><button class="he-del" title="Historical deletion is disabled">x</button>`;
+    entry.innerHTML = `<div class="he-body"><span class="he-date">${esc(toDisplayDate(report.report_date))} · ${esc(MEMO_LABELS[report.report_type] || 'Legacy')}</span><span class="he-sub">${esc(report.updated_at ? formatDateTime(report.updated_at) : '')}</span></div><button class="he-del" title="Historical deletion is disabled">x</button>`;
     $('.he-body', entry).onclick = () => openHistory(report);
     $('.he-del', entry).onclick = event => { event.stopPropagation(); showStatus('error', 'Historical report deletion is disabled in the Supabase version.'); };
     host.append(entry);
@@ -625,7 +663,7 @@ async function getDataForTab(tab) {
   const D = normalizeReportPayload(prev.payload);
   const rows = [];
   if (tab === 1) {
-    rows.push(['Admission E/C', D.admissionEC], ['Admission C/C', D.admissionCC], ['Discharge', D.discharge], ['Death', D.death], ['Transfer In', D.transferIn], ['Transfer Out', D.transferOut], ['Total Patient', D.totalPatientM], ['Empty Bed', D.emptyBeds?.count ?? ''], ['Empty Bed Information', formatEmptyBedEntries(legacyEmptyBedEntries(D.emptyBeds, state.ward)) || 'None'], ['Early Bird', D.earlyBirds.map(x => `${x.bed || '?'}→${x.dest || '?'}`).join(' | ') || 'None']);
+    rows.push(['Admission E/C', `${D.admissionEC} (M ${D.admissionBySex?.admissionEC?.M ?? '—'}, F ${D.admissionBySex?.admissionEC?.F ?? '—'})`], ['Admission C/C', `${D.admissionCC} (M ${D.admissionBySex?.admissionCC?.M ?? '—'}, F ${D.admissionBySex?.admissionCC?.F ?? '—'})`], ['Discharge', D.discharge], ['Death', D.death], ['Transfer In', D.transferIn], ['Transfer Out', D.transferOut], ['Total Patient', D.totalPatientM], ['Empty Bed', D.emptyBeds?.count ?? ''], ['Empty Bed Information', formatEmptyBedEntries(legacyEmptyBedEntries(D.emptyBeds, state.ward)) || 'None'], ['Early Bird', D.earlyBirds.map(x => `${x.bed || '?'}→${x.dest || '?'}`).join(' | ') || 'None']);
     state.items.filter(i => !i.builtin && (i.section === 'admission' || i.section === 'bedcount')).forEach(i => rows.push([i.label, formatDynamic(D.dynamicItems?.[i.key])]));
   } else if (tab === 2) {
     state.items.filter(i => i.builtin && i.section === 'infection').forEach(i => rows.push([i.label, (D.infBeds?.[i.key] || []).join(', ') || 'Nil']));
@@ -648,6 +686,13 @@ function gdConfirm() {
   const p = normalizeReportPayload(state.gdPrev.payload), c = collectPayload();
   if (state.gdTab === 1) {
     DIRECT_REPORT_KEYS.forEach(key => { c[key] = p[key] ?? c[key]; });
+    if (p.admissionBySex) {
+      c.admissionBySex = p.admissionBySex;
+    } else {
+      // Historical reports contain totals but no M/F information. Do not invent a breakdown.
+      c.admissionBySex = { admissionEC: { M: 0, F: 0 }, admissionCC: { M: 0, F: 0 }, transferIn: { M: 0, F: 0 } };
+      showStatus('error', 'Previous report has no M/F breakdown. Please re-enter admission counts by sex.');
+    }
     c.emptyBeds = p.emptyBeds;
     c.earlyBirds = p.earlyBirds;
     state.items.filter(i => !i.builtin && (i.section === 'admission' || i.section === 'bedcount')).forEach(i => { c.dynamicItems[i.key] = p.dynamicItems?.[i.key]; });
@@ -682,18 +727,18 @@ async function histReprint() { if (state.currentHist) await printReportObject(st
 function printContext(report, items, capacity) { return { ward: state.ward, report, capacity, items, settings: pdfSettings, logoUrl: new URL('../assets/heart-logo.png', import.meta.url).href }; }
 async function getPrintContext(report) { const context = await loadHistoricalReportContext(state.ward.id, report); return printContext(report, context.items, context.capacity); }
 async function handleGen() { await printCurrent(true); }
-async function printCurrent(autoSaveDraft = false) { let report = { report_date: $('#memoDate').value, payload: collectPayload(), bed_capacity_snapshot: state.capacity, updated_at: new Date().toISOString(), report_item_snapshot: state.items }; if (autoSaveDraft) { const savedDraft = await saveEntry(); if (!savedDraft) return; report = savedDraft; } await printReportObject(report); }
+async function printCurrent(autoSaveDraft = false) { let report = { report_type: state.memoType, report_date: $('#memoDate').value, payload: collectPayload(), bed_capacity_snapshot: state.capacity, updated_at: new Date().toISOString(), report_item_snapshot: state.items }; if (autoSaveDraft) { const savedDraft = await saveEntry(); if (!savedDraft) return; report = savedDraft; } await printReportObject(report); }
 async function printReportObject(report) { try { const context = await getPrintContext(report); const mod = await getPrintModule(); await mod.printWardMemo(context); showStatus('success', 'Print dialog opened.'); } catch (error) { showStatus('error', 'Unable to open print dialog: ' + (error.message || String(error))); console.error(error); } }
 function setPrintControl(id, value) { const el = document.getElementById(id); if (el) el.value = value; }
 function loadPrintControls() { const S = pdfSettings; [['topTitle', S.topTitle], ['topContent', S.topContent], ['boxTitle', S.boxTitle], ['boxContent', S.boxContent], ['infLabel', S.infLabel], ['infValue', S.infValue], ['devLabel', S.devLabel], ['devValue', S.devValue], ['lineHeader', S.lineHeader], ['lineContent', S.lineContent], ['consHeader', S.consHeader], ['consContent', S.consContent], ['intubHeader', S.intubHeader], ['intubContent', S.intubContent], ['nurseTitle', S.nurseTitle], ['nurseContent', S.nurseContent], ['sigContent', S.sigContent]].forEach(([k, v]) => setPrintControl(`pset_${k}`, v)); }
 function readPrintControls() { const number = (id, fallback) => { const n = parseFloat(document.getElementById(id)?.value); return Number.isFinite(n) ? n : fallback; }; return Object.fromEntries(Object.entries(FALLBACK_WARD_PRINT_SETTINGS).map(([key, fallback]) => [key, number(`pset_${key}`, fallback)])); }
-async function previewCurrentMemo() { const report = { report_date: $('#memoDate').value, payload: collectPayload(), bed_capacity_snapshot: state.capacity, updated_at: new Date().toISOString(), report_item_snapshot: state.items }; const context = printContext(report, state.items, state.capacity); const mod = await getPrintModule(); await mod.writeWardMemoToIframe($('#pdfPreviewFrame'), context); }
+async function previewCurrentMemo() { const report = { report_type: state.memoType, report_date: $('#memoDate').value, payload: collectPayload(), bed_capacity_snapshot: state.capacity, updated_at: new Date().toISOString(), report_item_snapshot: state.items }; const context = printContext(report, state.items, state.capacity); const mod = await getPrintModule(); await mod.writeWardMemoToIframe($('#pdfPreviewFrame'), context); }
 async function openPdfSettings() { const mod = await getPrintModule(); pdfSettings = mod.loadWardPrintSettings(); loadPrintControls(); $('#pdfSettingsModal').classList.add('show'); await previewCurrentMemo(); }
 function closePdfSettings() { clearTimeout(pdfDebounceTimer); $('#pdfSettingsModal').classList.remove('show'); }
 function updatePdfPreviewDebounced() { clearTimeout(pdfDebounceTimer); pdfDebounceTimer = setTimeout(updatePdfPreview, 250); }
 async function updatePdfPreview() { const mod = await getPrintModule(); pdfSettings = mod.saveWardPrintSettings(readPrintControls()); await previewCurrentMemo(); }
 async function resetPdfSettings() { if (!confirm('Reset all font sizes to the original Night Memo defaults?')) return; const mod = await getPrintModule(); pdfSettings = mod.resetWardPrintSettings(); loadPrintControls(); await previewCurrentMemo(); }
-function printPdf() { const frame = $('#pdfPreviewFrame'); frame.contentWindow?.focus(); frame.contentWindow?.print(); }
+async function printPdf() { const mod = await getPrintModule(); openPrintView({ html: mod.renderWardMemoHtml(printContext({ report_type: state.memoType, report_date: $('#memoDate').value, payload: collectPayload() }, state.items, state.capacity)), title: MEMO_LABELS[state.memoType], kind: 'ward-memo' }); }
 async function applyPdfSettings() { const mod = await getPrintModule(); pdfSettings = mod.saveWardPrintSettings(readPrintControls()); showStatus('loading', 'Choose “Save as PDF” in the print dialog.'); printPdf(); }
 
 Object.assign(window, { calcEmpty, addEmptyDetail, addEB, addPt, addCs, addIt, addNR, toggleNil, toggleNilConsult, toggleNilIntub, saveEntry, submitEntry, handleGen, openPdfSettings, closePdfSettings, printPdf, applyPdfSettings, updatePdfPreviewDebounced, resetPdfSettings, toggleHistory, toggleStaffList, addStaffRow, getDataForTab, gdClose, gdConfirm, histReprint, histDeleteCurrent });

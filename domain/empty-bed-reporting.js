@@ -71,10 +71,10 @@ export function makeEmptyBedReporting({ male = null, female = null, single = nul
 
 
 /** V2: One ordered manual-entry list. Never reconciled with total empty beds. */
-export const EMPTY_BED_ENTRY_DESIGNATIONS = Object.freeze(['M', 'F', 'S', 'D']);
+export const EMPTY_BED_ENTRY_DESIGNATIONS = Object.freeze(['M', 'F', 'S', 'D', 'T', 'OTHER']);
 
 export function parseEmptyBedLabel(label) {
-  const match = String(label ?? '').trim().toUpperCase().match(/^([1-9]\d*)([MFSD])$/);
+  const match = String(label ?? '').trim().toUpperCase().match(/^([1-9]\d*)([MFSDT])$/);
   if (!match || !Number.isSafeInteger(Number(match[1]))) return null;
   return { quantity: Number(match[1]), designation: match[2] };
 }
@@ -84,6 +84,7 @@ export function normalizeEmptyBedEntries(entries) {
   return entries.map(value => ({
     quantity: value?.quantity ?? null,
     designation: String(value?.designation ?? '').trim().toUpperCase(),
+    customDesignation: String(value?.customDesignation ?? '').trim(),
     remark: String(value?.remark ?? '').trim(),
   }));
 }
@@ -93,13 +94,14 @@ export function validateEmptyBedEntries(entries) {
   if (!Array.isArray(entries)) return ['Empty Bed entries must be a list.'];
   const errors = [];
   entries.forEach((entry, index) => {
-    const { quantity, designation, remark } = entry || {};
-    if (quantity == null && !designation && !remark) return;
+    const { quantity, designation, customDesignation, remark } = entry || {};
+    if (quantity == null && !designation && !customDesignation && !remark) return;
     const n = typeof quantity === 'number' ? quantity : Number(String(quantity ?? '').trim());
     if (!Number.isSafeInteger(n) || n < 1) errors.push(`Empty Bed entry ${index + 1} requires a positive whole number.`);
     if (!EMPTY_BED_ENTRY_DESIGNATIONS.includes(String(designation ?? '').trim().toUpperCase())) {
-      errors.push(`Empty Bed entry ${index + 1} requires M, F, S or D.`);
+      errors.push(`Empty Bed entry ${index + 1} requires a valid reporting designation.`);
     }
+    if (String(designation).toUpperCase() === 'OTHER' && !String(customDesignation || '').trim()) errors.push(`Empty Bed entry ${index + 1} requires a custom designation.`);
   });
   return errors;
 }
@@ -108,7 +110,7 @@ export function formatEmptyBedEntries(entries) {
   if (!Array.isArray(entries)) return '';
   return entries.filter(entry => entry && Number.isSafeInteger(Number(entry.quantity)) && Number(entry.quantity) > 0
     && EMPTY_BED_ENTRY_DESIGNATIONS.includes(String(entry.designation || '').toUpperCase()))
-    .map(entry => `${Number(entry.quantity)}${String(entry.designation).toUpperCase()}${String(entry.remark || '').trim() ? ` (${String(entry.remark).trim()})` : ''}`)
+    .map(entry => `${Number(entry.quantity)}${String(entry.designation).toUpperCase() === 'OTHER' ? String(entry.customDesignation || '').trim() : String(entry.designation).toUpperCase()}${String(entry.remark || '').trim() ? ` (${String(entry.remark).trim()})` : ''}`)
     .join(', ');
 }
 

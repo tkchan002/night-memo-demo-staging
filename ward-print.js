@@ -2,6 +2,7 @@
 // The visual structure and default font sizes follow the legacy Ward C5 app.
 
 import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './domain/empty-bed-reporting.js';
+import { openPrintView } from './services/print-job-service.js';
 const STORAGE_KEY = 'nightMemoPdfSettingsV1';
 
 export const DEFAULT_WARD_PRINT_SETTINGS = Object.freeze({
@@ -277,14 +278,31 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
   const date=report?.report_date||D.date||'',fD=fmtDate(date);
   const totalPatient=D.totalPatientM||'0';
   const empty=emptyBedInfo(D,ward,capacity);
-  const flowPrefix=legacyFlowGenderPrefix(ward);
+  // A typed memo can contain opposite-sex admissions even in a fixed-sex ward.
+  // A historical male-ward memo retains its old labels for fidelity.
+  const flowPrefix=D.admissionBySex ? '' : legacyFlowGenderPrefix(ward);
+  const typeLabel=report?.report_type==='pm'?'PM Memo':'Night Memo';
+  // The print table uses the hospital's original five columns. Never append
+  // the M/F breakdown inline: the narrow T/I column would overflow into CRE.
+  // Old reports without a sex breakdown keep showing their original totals.
+  const sexDetail = (key, stacked = false) => {
+    const pair = D.admissionBySex?.[key];
+    if (!pair || typeof pair !== 'object') return '';
+    const m = Math.max(0, Number(pair.M) || 0);
+    const f = Math.max(0, Number(pair.F) || 0);
+    if (m === 0 && f === 0) return ''; // Avoid redundant M:0/F:0 entries.
+    if (stacked) {
+      return '<div class="sex-detail sex-detail-stacked"><span>M: '+escHtml(m)+'</span><span>F: '+escHtml(f)+'</span></div>';
+    }
+    return '<div class="sex-detail"><span>M: '+escHtml(m)+'</span><span>F: '+escHtml(f)+'</span></div>';
+  };
   const earlyBirds=(D.earlyBirds||[]).filter(e=>e.bed||e.dest).map(e=>escHtml((e.bed||'__')+'-->'+(e.dest||'____'))).join('<br>');
   const sigRank=D.sigRank||'RN',sigName=(D.sigName||'').trim(),sigAppt=(D.sigAppt||'').trim();
   const wardName=ward?.name||ward?.display_name||ward?.code||'Ward';
   const phone=ward?.phone||'—',fax=ward?.fax||'—';
   const logo=logoUrl?'<img class="logo" src="'+escHtml(logoUrl)+'">':'';
 
-  return'<!doctype html><html><head><meta charset="utf-8"><title>Night Memo</title><style>'+ 
+  return'<!doctype html><html><head><meta charset="utf-8"><title>'+escHtml(typeLabel)+'</title><style>'+ 
     '@page{size:A4;margin:0;}html,body{margin:0;padding:0;background:#777;}*{box-sizing:border-box;}body{font-family:Tahoma,Arial,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
     '.preview-wrap{min-height:100vh;display:flex;justify-content:center;align-items:flex-start;padding:18px;}'+
     '.memo-page{width:210mm;min-height:297mm;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.35);padding:6mm;display:flex;flex-direction:column;}'+
@@ -302,7 +320,12 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
     '.section-title{font-size:'+F.boxTitle+'pt;font-weight:700;line-height:1.05;margin-bottom:1.5mm;}'+
     '.bigline{font-size:'+F.boxContent+'pt;font-weight:400;line-height:1.32;margin-bottom:1mm;}'+
     '.bignum{font-size:1em;font-weight:400;}'+
-    '.transfer .section-title{margin-bottom:1mm;}.transfer .bigline{white-space:nowrap;}.summary-table td.transfer{padding-left:1mm;padding-right:1mm;}'+
+    '.transfer .section-title{margin-bottom:1mm;}.transfer .bigline{white-space:normal;}.summary-table td.transfer{padding-left:1mm;padding-right:1mm;}'+
+    // A separate small-text line preserves totals and respects original widths.
+    // Keep each sex value together but let the pair wrap if values are large.
+    '.sex-detail{display:flex;gap:1.5mm;flex-wrap:wrap;align-items:baseline;margin:.3mm 0 1.2mm;font-size:8.5pt;line-height:1.12;font-weight:400;}'+
+    '.sex-detail span{white-space:nowrap;}'+
+    '.sex-detail-stacked{display:flex;flex-direction:column;gap:.3mm;font-size:8pt;}'+
     '.thin-line{border-bottom:.18mm solid #777;margin:1mm 0 2mm;}'+
     '.kv{display:block;break-inside:avoid;page-break-inside:avoid;margin-bottom:.95mm;}.k{display:inline;font-size:'+F.infLabel+'pt;font-weight:700;line-height:1.08;}.v{display:inline;font-size:'+F.infValue+'pt;font-weight:400;line-height:1.08;overflow-wrap:anywhere;}.dev .k{font-size:'+F.devLabel+'pt;}.dev .v{font-size:'+F.devValue+'pt;}'+
     '.nil{font-weight:400;}.total{display:inline;font-weight:400;white-space:nowrap;margin-left:.7mm;}'+
@@ -325,7 +348,7 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
     '.dense .summary-table td{padding:1mm;}.dense .kv{margin-bottom:.45mm;}.dense .patient-row{min-height:2mm;}.dense .consult td,.dense .intub td{height:5mm;padding:.6mm;}'+
     '</style></head><body><div class="preview-wrap"><div class="memo-page '+density+'">'+
       '<div class="memo-header">'+logo+
-        '<div class="title">Night Memo</div>'+
+        '<div class="title">'+escHtml(typeLabel)+'</div>'+
         '<div class="top-left">'+
           '<div class="top-row"><div class="top-label">From</div><div>:</div><div><b>'+escHtml(wardName)+'</b></div></div>'+
           '<div class="top-row"><div class="top-label">Tel</div><div>:</div><div>Ext '+escHtml(phone)+'</div></div>'+
@@ -339,8 +362,8 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
         '</div>'+
       '</div>'+
       '<table class="summary-table"><colgroup><col style="width:16%"><col style="width:9%"><col style="width:24%"><col style="width:24%"><col style="width:27%"></colgroup><tbody><tr>'+
-        '<td><div class="section-title">Admission:</div><div class="bigline">E/C&nbsp;&nbsp;&nbsp;&nbsp; '+escHtml(flowPrefix)+'<span class="bignum">'+escHtml(D.admissionEC||'0')+'</span></div><div class="bigline">C/C&nbsp;&nbsp;&nbsp;&nbsp; '+escHtml(flowPrefix)+'<span class="bignum">'+escHtml(D.admissionCC||'0')+'</span></div><div class="section-title" style="margin-top:3mm">Discharge:</div><div class="bigline">'+escHtml(flowPrefix)+'<span class="bignum">'+escHtml(D.discharge||'0')+'</span></div><div class="section-title" style="margin-top:2mm">Death: <span class="bignum">'+escHtml(D.death||'0')+'</span></div></td>'+
-        '<td class="transfer"><div class="section-title">T/I:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferIn||'0')+'</div><div class="thin-line"></div><div class="section-title">T/O:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferOut||'0')+'</div><div class="thin-line"></div></td>'+
+        '<td><div class="section-title">Admission:</div><div class="bigline">E/C&nbsp; <span class="bignum">'+escHtml(D.admissionEC??'0')+'</span></div>'+sexDetail('admissionEC')+'<div class="bigline">C/C&nbsp; <span class="bignum">'+escHtml(D.admissionCC??'0')+'</span></div>'+sexDetail('admissionCC')+'<div class="section-title" style="margin-top:3mm">Discharge:</div><div class="bigline">'+escHtml(flowPrefix)+'<span class="bignum">'+escHtml(D.discharge??'0')+'</span></div><div class="section-title" style="margin-top:2mm">Death: <span class="bignum">'+escHtml(D.death??'0')+'</span></div></td>'+
+        '<td class="transfer"><div class="section-title">T/I:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferIn??'0')+'</div>'+sexDetail('transferIn',true)+'<div class="thin-line"></div><div class="section-title">T/O:</div><div class="bigline">Gen&nbsp; '+escHtml(D.transferOut??'0')+'</div><div class="thin-line"></div></td>'+
         '<td>'+memoInfectionHtml(D,items)+'</td>'+
         '<td class="dev">'+memoDeviceHtml(D,items)+'</td>'+
         '<td><div class="total-line">Total Patient: '+escHtml(flowPrefix)+escHtml(totalPatient)+'</div><div class="total-line">Empty Bed: '+escHtml(empty.prefix)+escHtml(empty.count)+'</div>'+empty.manualHtml+empty.detailHtml+'<div class="early"><b>Next day early bird:</b> <i>eg.15--&gt;KH3A</i><br>'+earlyBirds+'</div></td>'+
@@ -386,15 +409,8 @@ export function writeWardMemoToIframe(iframe,context,afterLoad){
   });
 }
 
-export async function printWardMemo(context){
-  let frame=document.getElementById('memoPrintFrame');
-  if(!frame){
-    frame=document.createElement('iframe');
-    frame.id='memoPrintFrame';
-    frame.style.cssText='position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;';
-    document.body.appendChild(frame);
-  }
-  await writeWardMemoToIframe(frame,context);
-  frame.contentWindow?.focus();
-  frame.contentWindow?.print();
+export async function printWardMemo(context) {
+  // Top-level dedicated print page works on desktop and mobile; preview iframe is read-only.
+  const title = context?.report?.report_type === 'pm' ? 'PM Memo' : 'Night Memo';
+  return openPrintView({ html: renderWardMemoHtml(context), title, kind: 'ward-memo' });
 }

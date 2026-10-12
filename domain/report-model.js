@@ -10,6 +10,7 @@ export function fullReportPayloadDefaults() {
   return {
     admissionEC: '0', admissionCC: '0', discharge: '0', death: '0',
     transferIn: '0', transferOut: '0', totalPatientM: '0',
+    admissionBySex: { admissionEC: { M: 0, F: 0 }, admissionCC: { M: 0, F: 0 }, transferIn: { M: 0, F: 0 } },
     emptyBeds: { count: 0, version: 2, entries: [], details: [], reported: null }, earlyBirds: [],
     infBeds: {}, devBeds: {}, dynamicItems: {},
     nilSpecial: true, patients: [],
@@ -60,6 +61,11 @@ export function normalizeReportPayload(raw = {}) {
     reported: normalizeEmptyBedReporting(raw.emptyBeds?.reported),
     entries: normalizeEmptyBedEntries(raw.emptyBeds?.entries),
   };
+  out.admissionBySex = raw.admissionBySex && typeof raw.admissionBySex === 'object'
+    ? Object.fromEntries(['admissionEC','admissionCC','transferIn'].map(key => [key, {
+      M: Math.max(0, Number(raw.admissionBySex?.[key]?.M) || 0),
+      F: Math.max(0, Number(raw.admissionBySex?.[key]?.F) || 0),
+    }])) : null;
   out.earlyBirds = Array.isArray(raw.earlyBirds) ? raw.earlyBirds.map(x => ({ ...x })) : [];
   out.infBeds = Object.fromEntries(Object.entries(raw.infBeds || {}).map(([k, v]) => [k, normalizeBeds(v)]));
   out.devBeds = Object.fromEntries(Object.entries(raw.devBeds || {}).map(([k, v]) => [k, normalizeDevice(v)]));

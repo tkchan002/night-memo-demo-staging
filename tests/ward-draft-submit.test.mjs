@@ -7,18 +7,20 @@ const service = await readFile(new URL('../services/report-service.js', import.m
 const repo = await readFile(new URL('../data/repositories/report-repository.js', import.meta.url), 'utf8');
 const sql = await readFile(new URL('../supabase/migrations/20260928_ward_draft_submit.sql', import.meta.url), 'utf8');
 
-test('Save uses draft storage and Submit uses the submitted-report path', () => {
+test('Save and Submit use memo-type-scoped storage rather than a rolling window', () => {
   assert.match(page, /saveWardDraft\(/);
   assert.match(page, /submitWardReport\(/);
-  assert.match(service, /db\.saveWardReportDraft\(row\)/);
-  assert.match(service, /db\.saveWardReportSession\(row, SUBMISSION_WINDOW_MINUTES\)/);
-  assert.match(service, /db\.deleteWardReportDraft\(wardId, date\)/);
+  assert.match(service, /db\.saveWardCycleDraft\(row\)/);
+  assert.match(service, /db\.submitWardCycleReport\(row\)/);
+  assert.match(service, /db\.deleteWardCycleDraft\(wardId, date, memoType\)/);
+  assert.doesNotMatch(service, /db\.saveWardReportSession\(/);
 });
 
-test('Ward UI adds Submit, removes Save PDF, and renders last submission state', () => {
+test('Ward UI exposes both memo types and their independent submission status', () => {
   assert.match(page, /submitButton\.textContent = 'Submit'/);
-  assert.match(page, /Current memo cycle: Submitted/);
-  assert.match(page, /Current memo cycle: Not submitted/);
+  assert.match(page, /\$\('#memoType'\)\.addEventListener\('change', handleMemoTypeChange\)/);
+  assert.match(page, /Memo: Submitted|\$\{esc\(typeLabel\)\}: Submitted/);
+  assert.match(page, /\$\{esc\(typeLabel\)\}: Not submitted/);
   assert.match(page, /Draft changes pending re-submit/);
   assert.match(page, /handleGen\\\(/);
   assert.match(page, /save pdf/i);

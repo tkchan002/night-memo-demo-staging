@@ -23,13 +23,12 @@ test('maintenance-defined infection and device items render in their own ward se
   assert.match(page, /\$\('#customDevRows'\)\.innerHTML = devices\.map\(dynamicRowHtml\)\.join\(''\)/);
 });
 
-test('stale submitted reports are not selected as the editable ward form source', async () => {
+test('PM/Night editable form selects the exact typed report and draft', async () => {
   const service = await read('services/report-service.js');
-
-  assert.match(service, /isRecentSubmission/);
-  assert.match(service, /function currentWardSubmission\(report, now = new Date\(\)\)/);
-  assert.match(service, /const report = currentWardSubmission\(latestReport\)/);
-  assert.match(service, /const sourceRecord = draft \|\| report/);
+  assert.match(service, /db\.getWardCycleReport\(wardId, date, memoType\)/);
+  assert.match(service, /db\.getWardCycleDraft\(wardId, date, memoType\)/);
+  assert.match(service, /return \{ operational, capacity: Number\(capacity\)/);
+  assert.doesNotMatch(service, /currentWardSubmission\(/);
 });
 
 test('Get Data excludes exactly the active current-cycle report', async () => {

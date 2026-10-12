@@ -55,6 +55,7 @@ export function renderManagerMemoPrintHtml(document = {}, { printedAt = new Date
 
     ${richSection('Early Bird', document.earlyBirdHtml)}
     ${richSection('Empty Bed', document.emptyBedHtml)}
+    ${richSection('Additional Report', document.additionalReportHtml)}
 
     <section class="manager-print-two-col">
       <div>

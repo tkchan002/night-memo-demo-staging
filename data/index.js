@@ -25,3 +25,5 @@ export {
   listManagerMemoCheckpoints,
   getManagerMemoCheckpoint,
 } from './repositories/manager-memo-repository.js';
+// PM/Night cycle APIs coexist with legacy history, but never use the old two-hour rules.
+export { getWardCycleReport, getCycleReports, submitWardCycleReport, getWardCycleDraft, saveWardCycleDraft, deleteWardCycleDraft } from './repositories/report-cycle-repository.js';

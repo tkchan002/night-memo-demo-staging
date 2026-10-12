@@ -15,7 +15,8 @@ import {
   listManagerMemoCheckpoints,
   getManagerMemoCheckpoint,
 } from '../data/index.js';
-import { SUBMISSION_WINDOW_MINUTES, reportSubmittedAt } from '../domain/report-session.js';
+import { reportSubmittedAt } from '../domain/report-session.js';
+import { MEMO_LABELS, missingMemoTypes } from '../domain/report-cycle.js';
 import {
   buildManagerMemoDocument,
   isReportNewerThanSource,
@@ -27,6 +28,7 @@ import {
 import { loadManagerCurrent } from '../services/report-service.js';
 import { renderManagerMemoPrintHtml } from '../manager-memo-print.js';
 import { buildManagerWardInformation } from '../domain/manager-ward-information.js';
+import { openPrintView } from '../services/print-job-service.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -38,7 +40,6 @@ const state = {
   bundle: [],
   items: [],
   allWards: [],
-  windowMinutes: SUBMISSION_WINDOW_MINUTES,
   refreshedAt: null,
   reportingDate: null,
   memo: null,
@@ -182,11 +183,10 @@ async function refreshHistory() {
 async function refreshWardStatus({ initial = false } = {}) {
   if (!initial) setStatus('Refreshing ward submission status…', 'info');
   try {
-    const current = await loadManagerCurrent(SUBMISSION_WINDOW_MINUTES);
+    const current = await loadManagerCurrent();
     state.bundle = current.bundle || [];
     state.items = current.items || [];
     state.allWards = current.allWards || state.bundle.map(entry => entry.ward);
-    state.windowMinutes = current.windowMinutes || SUBMISSION_WINDOW_MINUTES;
     state.refreshedAt = new Date();
     renderSubmissionMonitor();
     renderWardInformation();
@@ -198,26 +198,21 @@ async function refreshWardStatus({ initial = false } = {}) {
 }
 
 function submissionWindowLabel() {
-  const end = state.refreshedAt || new Date();
-  const start = new Date(end.getTime() - state.windowMinutes * 60 * 1000);
-  const fmt = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Hong_Kong', day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
-  return `Current memo cycle · submissions in past ${state.windowMinutes} minutes · ${fmt.format(start)} – ${fmt.format(end)} HKT`;
+  return `Reporting night ${toDisplayDate(state.reportingDate)} · PM 21:00 and Night 04:00 (HKT) · no 120-minute expiry`;
 }
 
-function memoSourceForWard(wardId) {
-  return (state.memo?.source_snapshot || []).find(row => row.ward_id === wardId) || null;
+function memoSourceForWard(wardId, type) {
+  return (state.memo?.source_snapshot || []).find(row => row.ward_id === wardId && row.memo_type === type) || null;
 }
 
-function currentReportForWard(wardId) {
-  return state.bundle.find(entry => entry.ward?.id === wardId)?.report || null;
+function currentReportForWard(wardId, type) {
+  const entry = state.bundle.find(item => item.ward?.id === wardId);
+  return type === 'pm' ? entry?.pmReport : entry?.nightReport;
 }
 
 function isNewerThanDocument(wardId) {
   if (!state.memo) return false;
-  return isReportNewerThanSource(currentReportForWard(wardId), memoSourceForWard(wardId));
+  return ['pm', 'night'].some(type => isReportNewerThanSource(currentReportForWard(wardId, type), memoSourceForWard(wardId, type)));
 }
 
 function hasNewerWardData() {
@@ -228,37 +223,35 @@ function hasNewerWardData() {
 function renderSubmissionMonitor() {
   const label = $('#submissionWindowLabel');
   if (label) label.textContent = submissionWindowLabel();
-  const submittedCount = state.bundle.filter(entry => entry.report).length;
-  const total = state.allWards.length || state.bundle.length;
-  if ($('#submissionCount')) $('#submissionCount').textContent = `${submittedCount} / ${total} submitted`;
-
-  const sourceChange = hasNewerWardData();
-  if ($('#sourceChangeNotice')) $('#sourceChangeNotice').hidden = !sourceChange;
+  const submittedCount = state.bundle.reduce((n, entry) => n + Number(!!entry.pmReport) + Number(!!entry.nightReport), 0);
+  const total = (state.allWards.length || state.bundle.length) * 2;
+  if ($('#submissionCount')) $('#submissionCount').textContent = `${submittedCount} / ${total} submissions`;
+  if ($('#sourceChangeNotice')) $('#sourceChangeNotice').hidden = !hasNewerWardData();
 
   const body = $('#submissionRows');
   if (!body) return;
-  body.innerHTML = state.allWards.map(ward => {
-    const entry = state.bundle.find(item => item.ward?.id === ward.id) || { ward, report: null };
-    const report = entry.report;
+  const statusCell = (report, label) => {
     const status = managerSubmissionStatus(report);
-    const stamp = reportSubmittedAt(report);
-    const submittedAt = stamp ? formatDateTime(stamp, 'en-GB') : '—';
-    const source = memoSourceForWard(ward.id);
+    return `<span class="${status.state}">${esc(label)}: ${esc(status.label)}</span>`;
+  };
+  body.innerHTML = state.allWards.map(ward => {
+    const entry = state.bundle.find(item => item.ward?.id === ward.id) || {};
+    const missing = missingMemoTypes(entry.pmReport, entry.nightReport);
     const newer = isNewerThanDocument(ward.id);
-    let sourceLabel = state.memo ? 'Not in document' : 'No draft yet';
-    if (newer) sourceLabel = 'Newer submission available';
-    else if (source && report) sourceLabel = 'Synced';
-    else if (source) sourceLabel = 'Earlier submission in document';
-    return `<tr class="${newer ? 'newer' : status.state}">
+    const sourceLabel = newer ? 'Newer submission available' :
+      !state.memo ? 'No Manager draft' : missing.length ? 'Incomplete source' : 'No new source';
+    return `<tr class="${newer ? 'newer' : missing.length ? 'missing' : 'submitted'}">
       <td><b>${esc(ward.name)}</b></td>
-      <td>${esc(status.label)}</td>
-      <td>${esc(submittedAt)}</td>
+      <td>${statusCell(entry.pmReport, 'PM')}</td>
+      <td>${statusCell(entry.nightReport, 'Night')}</td>
+      <td>${missing.length ? esc(`Missing ${missing.map(x => MEMO_LABELS[x]).join(' and ')}`) : 'Complete'}</td>
       <td>${esc(sourceLabel)}</td>
-      <td>${report ? `<button type="button" class="pill ward-memo-view-btn" data-ward-id="${esc(ward.id)}">View Memo</button>` : ''}</td>
+      <td>${['pm','night'].filter(type => entry[type === 'pm' ? 'pmReport' : 'nightReport'])
+        .map(type => `<button type="button" class="pill ward-memo-view-btn" data-ward-id="${esc(ward.id)}" data-memo-type="${type}">View ${type === 'pm' ? 'PM' : 'Night'}</button>`).join(' ')}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5">No active wards found.</td></tr>';
+  }).join('') || '<tr><td colspan="6">No active wards found.</td></tr>';
   $$('.ward-memo-view-btn', body).forEach(button => {
-    button.onclick = () => openWardMemoPreview(button.dataset.wardId);
+    button.onclick = () => openWardMemoPreview(button.dataset.wardId, button.dataset.memoType);
   });
 }
 
@@ -387,6 +380,7 @@ function renderEditor({ keepDirty = false } = {}) {
     renderEditableRows($('#memoInfectionRows'), doc.infectionRows || [], INF_KEYS);
     $('#memoEarlyBird').innerHTML = sanitizeRichHtml(doc.earlyBirdHtml || '<div><br></div>');
     $('#memoEmptyBed').innerHTML = sanitizeRichHtml(doc.emptyBedHtml || '<div><br></div>');
+    $('#memoAdditionalReport').innerHTML = sanitizeRichHtml(doc.additionalReportHtml || '<div><br></div>');
     $('#ctTotal').value = doc.ct?.total || '';
     $('#ctMaleGeneral').value = doc.ct?.maleGeneral || '';
     $('#ctMaleCohort').value = doc.ct?.maleCohort || '';
@@ -436,6 +430,7 @@ function serializeDocument() {
     infectionRows: readRows($('#memoInfectionRows'), current.infectionRows, INF_KEYS),
     earlyBirdHtml: sanitizeRichHtml($('#memoEarlyBird').innerHTML),
     emptyBedHtml: sanitizeRichHtml($('#memoEmptyBed').innerHTML),
+    additionalReportHtml: sanitizeRichHtml($('#memoAdditionalReport').innerHTML),
     ct: {
       total: $('#ctTotal').value,
       maleGeneral: $('#ctMaleGeneral').value,
@@ -662,6 +657,10 @@ function previewCurrentMemo() {
 }
 
 function showPrintDocument(document, { title = 'Night Memo Preview', autoPrint = false } = {}) {
+  if (autoPrint) {
+    openPrintView({ html: renderManagerMemoPrintHtml(document), title, kind: 'manager-memo' });
+    return Promise.resolve();
+  }
   return new Promise(resolve => {
     const modal = $('#printPreviewModal');
     const frame = $('#printPreviewFrame');
@@ -669,7 +668,6 @@ function showPrintDocument(document, { title = 'Night Memo Preview', autoPrint =
     modal.hidden = false;
     frame.onload = () => {
       frame.onload = null;
-      if (autoPrint) setTimeout(() => frame.contentWindow?.print(), 60);
       resolve();
     };
     frame.srcdoc = renderManagerMemoPrintHtml(document);
@@ -679,7 +677,7 @@ function showPrintDocument(document, { title = 'Night Memo Preview', autoPrint =
 async function regenerateFromWardData() {
   if (!state.memo || !state.editorOpen || state.conflicted || state.boundaryExpired || state.historyMode) return;
   if (!ensureReportingNightCurrent()) return;
-  const ok = confirm('Replace the ward-derived tables and generated notes with the latest submitted ward data? Header, CT/06:00 values and signature will be preserved. A safety checkpoint will be kept first.');
+  const ok = confirm('Replace the ward-derived tables and generated notes with the latest submitted ward data? Header, Additional Report, CT/06:00 values and signature will be preserved. A safety checkpoint will be kept first.');
   if (!ok) return;
   try {
     await flushRecovery();
@@ -1050,7 +1048,7 @@ function renderWardInformation() {
   }).join('');
 
   $$('.ward-info-view-memo', host).forEach(button => {
-    button.onclick = () => openWardMemoPreview(button.dataset.wardId);
+    button.onclick = () => openWardMemoPreview(button.dataset.wardId, state.bundle.find(e => e.ward?.id === button.dataset.wardId)?.nightReport ? 'night' : 'pm');
   });
 }
 
@@ -1059,24 +1057,26 @@ async function getWardPrintModule() {
   return wardPrintModulePromise;
 }
 
-async function openWardMemoPreview(wardId) {
+async function openWardMemoPreview(wardId, memoType = 'night') {
   const entry = state.bundle.find(item => item.ward?.id === wardId);
-  if (!entry?.report) return;
-  const items = entry.report.report_item_snapshot?.length
-    ? entry.report.report_item_snapshot.map(item => ({ ...item, __historical: true }))
+  if (!entry) return;
+  const report = memoType === 'pm' ? entry.pmReport : entry.nightReport;
+  if (!report) return;
+  const items = report.report_item_snapshot?.length
+    ? report.report_item_snapshot.map(item => ({ ...item, __historical: true }))
     : state.items;
   const mod = await getWardPrintModule();
   const context = {
     ward: entry.ward,
-    report: entry.report,
-    capacity: entry.report.bed_capacity_snapshot ?? entry.capacity,
+    report,
+    capacity: report.bed_capacity_snapshot ?? entry.capacity,
     items,
     settings: mod.loadWardPrintSettings(),
     logoUrl: new URL('../assets/heart-logo.png', import.meta.url).href,
   };
   state.wardPreviewContext = context;
-  const submitted = reportSubmittedAt(entry.report);
-  $('#wardMemoPreviewTitle').textContent = `${entry.ward.name} Ward Night Memo`;
+  const submitted = reportSubmittedAt(report);
+  $('#wardMemoPreviewTitle').textContent = `${entry.ward.name} ${MEMO_LABELS[memoType]}`;
   $('#wardMemoPreviewMeta').textContent = submitted ? `Submitted ${formatDateTime(submitted, 'en-GB')}` : 'Submitted Ward memo';
   $('#wardMemoPreviewModal').hidden = false;
   await mod.writeWardMemoToIframe($('#wardMemoPreviewFrame'), context);

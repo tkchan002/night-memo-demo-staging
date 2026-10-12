@@ -53,19 +53,19 @@
           <div class="sec-title">Header Information</div>
           <div class="fr"><span class="fl"><b>From:</b></span><span class="fc" id="wardFrom" style="font-size:1.1rem;font-weight:600">Ward</span></div>
           <div class="fr"><span class="fl"><b>Tel:</b></span><span class="fc" id="wardContact" style="font-size:1.1rem">—</span></div>
-          <div class="fr"><span class="fl"><b>Date:</b></span><span class="fc"><input type="date" id="memoDate"></span></div>
+          <div class="fr"><span class="fl"><b>Date:</b></span><span class="fc"><input type="date" id="memoDate"> <label for="memoType" style="margin-left:10px;font-weight:700">Memo:</label> <select id="memoType" aria-label="Memo type"><option value="pm">PM Memo</option><option value="night">Night Memo</option></select></span></div>
         </div>
         <!-- Tab 1 -->
         <div class="tp" id="t1">
           <button class="btn-get-corner" onclick="getDataForTab(1)">Get Data</button>
           <div class="sec-title">Admission / Discharge / Death</div>
-          <div class="fr"><span class="fl">Admission E/C:</span><span class="fc"><select id="admissionEC" class="w55"></select></span></div>
-          <div class="fr"><span class="fl">Admission C/C:</span><span class="fc"><select id="admissionCC" class="w55"></select></span></div>
+          <div class="fr"><span class="fl">Admission E/C:</span><span class="fc"><span class="sex-admission"><label>M <select id="admissionEC_M" class="w55" aria-label="Admission E/C male"></select></label><label>F <select id="admissionEC_F" class="w55" aria-label="Admission E/C female"></select></label></span><select id="admissionEC" class="w55" hidden aria-hidden="true" tabindex="-1"></select></span></div>
+          <div class="fr"><span class="fl">Admission C/C:</span><span class="fc"><span class="sex-admission"><label>M <select id="admissionCC_M" class="w55" aria-label="Admission C/C male"></select></label><label>F <select id="admissionCC_F" class="w55" aria-label="Admission C/C female"></select></label></span><select id="admissionCC" class="w55" hidden aria-hidden="true" tabindex="-1"></select></span></div>
           <hr class="sep">
           <div class="fr"><span class="fl">Discharge:</span><span class="fc"><select id="discharge" class="w55"></select></span></div>
           <div class="fr"><span class="fl">Death:</span><span class="fc"><select id="death" class="w55"></select></span></div>
           <hr class="sep">
-          <div class="fr"><span class="fl">T/I (Transfer In) Gen:</span><span class="fc"><select id="transferIn" class="w55"></select></span></div>
+          <div class="fr"><span class="fl">T/I (Transfer In) Gen:</span><span class="fc"><span class="sex-admission"><label>M <select id="transferIn_M" class="w55" aria-label="T/I (Transfer In) Gen male"></select></label><label>F <select id="transferIn_F" class="w55" aria-label="T/I (Transfer In) Gen female"></select></label></span><select id="transferIn" class="w55" hidden aria-hidden="true" tabindex="-1"></select></span></div>
           <div class="fr"><span class="fl">T/O (Transfer Out) Gen:</span><span class="fc"><select id="transferOut" class="w55"></select></span></div>
           <hr class="sep">
           <div class="sec-title" style="font-size:1.15rem;margin-top:10px">Bed Count</div>
@@ -73,7 +73,7 @@
           <div class="fr"><span class="fl" id="emptyBedLabel">Empty Bed:</span><span class="fc"><b id="emptyBedM" style="font-size:1.15rem">0</b><span id="emptyBedFormula" style="color:#6F6F6F;margin-left:6px"></span></span></div>
           <div id="emptyDetailBlock">
             <div style="font-weight:700;margin-bottom:6px">Optional Bed / Location Remarks</div>
-            <div class="fr" style="min-height:24px;margin-bottom:2px" aria-hidden="true"><span class="fc" style="font-size:0.9rem;font-weight:600"><span style="width:70px">Number</span><span style="width:80px">M/F/S/D</span><span>Remarks</span></span></div>
+            <div class="fr" style="min-height:24px;margin-bottom:2px" aria-hidden="true"><span class="fc" style="font-size:0.9rem;font-weight:600"><span style="width:70px">Number</span><span style="width:80px">M/F/S/D/T/Other</span><span>Remarks</span></span></div>
             <div id="emptyDetailRows"></div>
             <button class="btn-s" type="button" onclick="addEmptyDetail()">+ Add Entry</button>
           </div>
