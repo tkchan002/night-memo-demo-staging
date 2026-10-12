@@ -10,6 +10,7 @@ const htmlEntries = {
   manager: 'manager.html',
   maintenance: 'maintenance.html',
   managerTemplate: 'manager-template.html',
+  print: 'print.html',
 };
 
 const input = Object.fromEntries(
