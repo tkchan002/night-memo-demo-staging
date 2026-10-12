@@ -34,9 +34,9 @@ test('official Night Memo editor and print contract exclude Ward clinical/additi
 test('Ward Information is source-owned and read-only', () => {
   assert.match(html, /id="wardInformationList"/);
   assert.match(page, /buildManagerWardInformation/);
-  assert.match(html, /Patient List/);
-  assert.doesNotMatch(page, /Clinical \/ General Information/);
-  assert.match(page, /Additional Report Items/);
+  assert.match(page, /renderWardInfoSection\('Patient List'/);
+  assert.match(page, /renderWardInfoSection\('Additional Report Items'/);
+  assert.doesNotMatch(page, /renderWardInfoSection\('Clinical \/ General Information'/);
   const panel = html.match(/data-manager-tab-panel="ward-info"[^]*?<\/section>\s*<\/section>/)?.[0] || '';
   assert.doesNotMatch(panel, /contenteditable="true"/);
 });

@@ -20,7 +20,7 @@ export async function loadWardReportContext(wardId, date, memoType = 'night') {
     db.getWardCycleReport(wardId, date, memoType), db.getWardCycleDraft(wardId, date, memoType),
   ]);
   const items = itemsForReport(allItems, date, draft || report, false);
-  return { operational, capacity: Number(capacity) || 0, items, allItems, staff: staff || [], report, draft };
+  return { operational, capacity: capacity == null ? null : Number(capacity), items, allItems, staff: staff || [], report, draft };
 }
 
 export async function loadHistoricalReportContext(wardId, report) {

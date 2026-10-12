@@ -11,7 +11,7 @@ export function fullReportPayloadDefaults() {
     admissionEC: '0', admissionCC: '0', discharge: '0', death: '0',
     transferIn: '0', transferOut: '0', totalPatientM: '0',
     admissionBySex: { admissionEC: { M: 0, F: 0 }, admissionCC: { M: 0, F: 0 }, transferIn: { M: 0, F: 0 } },
-    emptyBeds: { count: 0, version: 2, entries: [], details: [], reported: null }, earlyBirds: [],
+    emptyBeds: { count: null, version: 2, entries: [], details: [], reported: null }, earlyBirds: [],
     infBeds: {}, devBeds: {}, dynamicItems: {},
     nilSpecial: true, patients: [],
     nilConsultation: true, consultations: [],
@@ -56,7 +56,8 @@ export function normalizeReportPayload(raw = {}) {
   const out = { ...defaults, ...raw };
   out.emptyBeds = {
     version: Array.isArray(raw.emptyBeds?.entries) ? 2 : 1,
-    count: numberValue(raw.emptyBeds?.count, numberValue(defaults.emptyBeds.count)),
+    count: raw.emptyBeds?.count === null || raw.emptyBeds?.count === undefined || raw.emptyBeds?.count === ''
+      ? null : numberValue(raw.emptyBeds.count, null),
     details: Array.isArray(raw.emptyBeds?.details) ? raw.emptyBeds.details.map(x => ({ ...x })) : [],
     reported: normalizeEmptyBedReporting(raw.emptyBeds?.reported),
     entries: normalizeEmptyBedEntries(raw.emptyBeds?.entries),

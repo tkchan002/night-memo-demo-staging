@@ -16,11 +16,11 @@ import {
   getManagerMemoCheckpoint,
 } from '../data/index.js';
 import { reportSubmittedAt } from '../domain/report-session.js';
-import { MEMO_LABELS, missingMemoTypes } from '../domain/report-cycle.js';
+import { MEMO_LABELS } from '../domain/report-cycle.js';
+import { wardSubmissionStates } from '../domain/submission-status.js';
 import {
   buildManagerMemoDocument,
   isReportNewerThanSource,
-  managerSubmissionStatus,
   regenerateWardDerivedSections,
   reportingNightDate,
   sourceSnapshotFromBundle,
@@ -230,20 +230,18 @@ function renderSubmissionMonitor() {
 
   const body = $('#submissionRows');
   if (!body) return;
-  const statusCell = (report, label) => {
-    const status = managerSubmissionStatus(report);
-    return `<span class="${status.state}">${esc(label)}: ${esc(status.label)}</span>`;
-  };
+  const statusCell = (status, label) => `<span class="memo-status memo-status--${status.state}" aria-label="${esc(label)} Memo: ${esc(status.label)}">${esc(label)}: ${esc(status.label)}</span>`;
   body.innerHTML = state.allWards.map(ward => {
     const entry = state.bundle.find(item => item.ward?.id === ward.id) || {};
-    const missing = missingMemoTypes(entry.pmReport, entry.nightReport);
+    const status = wardSubmissionStates(entry);
+    const missing = status.missingTypes;
     const newer = isNewerThanDocument(ward.id);
     const sourceLabel = newer ? 'Newer submission available' :
       !state.memo ? 'No Manager draft' : missing.length ? 'Incomplete source' : 'No new source';
-    return `<tr class="${newer ? 'newer' : missing.length ? 'missing' : 'submitted'}">
+    return `<tr>
       <td><b>${esc(ward.name)}</b></td>
-      <td>${statusCell(entry.pmReport, 'PM')}</td>
-      <td>${statusCell(entry.nightReport, 'Night')}</td>
+      <td>${statusCell(status.pm, 'PM')}</td>
+      <td>${statusCell(status.night, 'Night')}</td>
       <td>${missing.length ? esc(`Missing ${missing.map(x => MEMO_LABELS[x]).join(' and ')}`) : 'Complete'}</td>
       <td>${esc(sourceLabel)}</td>
       <td>${['pm','night'].filter(type => entry[type === 'pm' ? 'pmReport' : 'nightReport'])

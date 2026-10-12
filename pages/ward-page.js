@@ -13,9 +13,11 @@ import {
   normalizeDevice, formatDevice, formatDynamic,
 } from '../domain/report-model.js';
 import { legacyEmptyBedEntries, formatEmptyBedEntries } from '../domain/empty-bed-reporting.js';
+import { calculateEmptyBeds, resolveReportEmptyBeds, displayEmptyBeds } from '../domain/bed-occupancy.js';
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
 import { reportNightDate, defaultMemoType, MEMO_LABELS } from '../domain/report-cycle.js';
 import { openPrintView } from '../services/print-job-service.js';
+import { emptyBedEntryMarkup } from '../components/empty-bed-entry.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -24,7 +26,7 @@ const wardTabs = initWardTabs();
 const INF_MAP = { iCRE: 'i_CRE', iVRE: 'i_VRE', iCOV: 'i_COVID', iMDR: 'i_MDRA', iCD: 'i_CD', iInf: 'i_Inf', iCA: 'i_CA' };
 const DEV_MAP = { dMV: 'd_MV', dNIV: 'd_NIV', dHF: 'd_HFNC', dHD: 'd_HD', dCA: 'd_CAPD' };
 const FALLBACK_WARD_PRINT_SETTINGS = Object.freeze({ topTitle: 19, topContent: 13, boxTitle: 15, boxContent: 12, lineHeader: 9, lineContent: 11, consHeader: 10, consContent: 10, intubHeader: 9, intubContent: 10, nurseTitle: 9, nurseContent: 11, sigContent: 11, infLabel: 12, infValue: 12, devLabel: 12, devValue: 12 });
-const state = { access: null, ward: null, capacity: 0, items: [], allItems: [], staff: [], report: null, draft: null, submissionStatus: null, memoType: 'night', history: [], currentHist: null, operational: true, historyMode: false, staffMode: false, gdTab: null, gdPrev: null, loadedDate: null, dirty: false, saving: false, submitting: false };
+const state = { access: null, ward: null, capacity: null, items: [], allItems: [], staff: [], report: null, draft: null, submissionStatus: null, memoType: 'night', history: [], currentHist: null, operational: true, historyMode: false, staffMode: false, gdTab: null, gdPrev: null, loadedDate: null, dirty: false, saving: false, submitting: false };
 let printModulePromise = null;
 let nurseCounter = 0;
 let pdfSettings = { ...FALLBACK_WARD_PRINT_SETTINGS };
@@ -303,31 +305,23 @@ function updateEmptyBedMode() {
   $('#emptyDetailBlock').classList.remove('hidden');
   calcEmpty();
 }
-function calcEmpty() { const total = Number($('#totalPatientM').value) || 0; const count = Math.max(0, (Number(state.capacity) || 0) - total); $('#emptyBedM').textContent = String(count); $('#emptyBedFormula').textContent = `(${state.capacity} - Total)`; return count; }
+function calcEmpty() {
+  const count = calculateEmptyBeds(state.capacity, $('#totalPatientM').value);
+  $('#emptyBedM').textContent = displayEmptyBeds(count);
+  $('#emptyBedFormula').textContent = state.capacity == null ? '(Capacity unavailable)' : `(${state.capacity} - Total)`;
+  return count;
+}
 function addEmptyDetail(value = {}) {
   const row = document.createElement('div');
-  row.className = 'empty-detail-row fr';
-  // Match the Ward form's existing native selects, input, flex rows and remove button.
+  row.className = 'empty-detail-row';
+  row.innerHTML = emptyBedEntryMarkup({ value, ward: state.ward, numberCeiling: bedCeiling() });
   const savedNumber = String(value.quantity ?? '');
   const savedCode = String(value.designation ?? '').trim().toUpperCase();
-  const numericValue = Number(savedNumber);
-  const maxNumber = Math.max(bedCeiling(), Number.isSafeInteger(numericValue) && numericValue > 0 ? numericValue : 0);
-  const numberOptions = ['<option value=""></option>'];
-  for (let number = 1; number <= maxNumber; number += 1) {
-    numberOptions.push(`<option value="${number}">${number}</option>`);
-  }
-  const designationOptions = ['<option value=""></option>'];
-  const enabled = state.ward?.single_double_reporting_enabled === true;
-  const availableCodes = enabled ? ['M', 'F', 'S', 'D', 'T', 'OTHER'] : ['M', 'F'];
-  // Retain previously recorded categories when showing a historical report.
-  if (['S', 'D', 'T', 'OTHER'].includes(savedCode) && !availableCodes.includes(savedCode)) availableCodes.push(savedCode);
-  for (const code of availableCodes) designationOptions.push(`<option value="${code}">${code === 'OTHER' ? 'Other' : code}</option>`);
-  row.innerHTML = `<span class="fc"><select data-empty-quantity style="width:70px" aria-label="Empty bed number">${numberOptions.join('')}</select><select data-empty-designation style="width:80px" aria-label="Empty bed type">${designationOptions.join('')}</select><input type="text" class="w280" data-empty-custom aria-label="Custom designation" style="display:none;width:140px" value="${esc(value.customDesignation || '')}"><input type="text" class="w280" data-empty-remark aria-label="Empty bed remarks" value="${esc(value.remark || '')}"><button class="btn-x" type="button" aria-label="Remove empty bed entry">x</button></span>`;
   $('[data-empty-quantity]', row).value = savedNumber;
   $('[data-empty-designation]', row).value = savedCode;
   const designationSelect = $('[data-empty-designation]', row);
-  const customInput = $('[data-empty-custom]', row);
-  const syncCustom = () => { customInput.style.display = designationSelect.value === 'OTHER' ? '' : 'none'; };
+  const customField = $('.empty-custom', row);
+  const syncCustom = () => { customField.hidden = designationSelect.value !== 'OTHER'; };
   designationSelect.addEventListener('change', syncCustom);
   syncCustom();
   $('.btn-x', row).onclick = () => { row.remove(); markDirty(); };
@@ -423,9 +417,6 @@ function collectPayload() {
   Object.keys(DEV_MAP).forEach(key => { D.devBeds[key] = getDeviceValue(key); });
   state.items.filter(i => !i.builtin).forEach(i => { D.dynamicItems[i.key] = getDynamicValue(i); });
   const entries = collectEmptyDetails();
-  if (state.ward?.single_double_reporting_enabled !== true && entries.some(entry => ['S','D','T','OTHER'].includes(entry.designation))) {
-    throw new Error('S/D reporting is disabled for this ward in Maintenance. Remove these entries or ask Maintenance to enable it.');
-  }
   D.emptyBeds = { count: calcEmpty(), version: 2, entries };
   D.earlyBirds = $$('#ebRows>.fr').map(row => ({ bed: $('.eB', row).value, dest: $('.eD', row).value.trim() })).filter(x => x.bed || x.dest);
   D.nilSpecial = $('#nilCb').checked;
@@ -562,12 +553,10 @@ function dynamicRows(items, payload, predicate) {
 function renderHistorySections(report, items, capacity) {
   const D = normalizeReportPayload(report.payload);
   const cap = report.bed_capacity_snapshot ?? capacity ?? state.capacity;
-  const empty = report.payload?.emptyBeds && typeof report.payload.emptyBeds === 'object'
-    ? D.emptyBeds
-    : { count: Math.max(0, cap - Number(D.totalPatientM || 0)), details: [] };
+  const empty = { ...D.emptyBeds, count: resolveReportEmptyBeds({ report, capacity: cap }) };
 
   const admissionDynamic = dynamicRows(items, D, i => i.section === 'admission' || i.section === 'bedcount');
-  $('#hd0').innerHTML = `<div class="ro-wrap"><div class="ro-sec-title">Admission / Discharge / Death</div>${roFr('Admission E/C:', D.admissionEC)}${roFr('Admission C/C:', D.admissionCC)}${roFr('Discharge:', D.discharge)}${roFr('Death:', D.death)}${roFr('T/I Gen:', D.transferIn)}${roFr('T/O Gen:', D.transferOut)}${roFr('Total Patient:', D.totalPatientM)}${roFr('Empty Bed:', empty.count)}${roFr('Empty Bed Information:', formatEmptyBedEntries(legacyEmptyBedEntries(empty, state.ward)) || 'None')}${roFr('Early Bird(s):', D.earlyBirds.map(x => `${x.bed || '?'} -> ${x.dest || '?'}`).join(' | ') || 'None')}${admissionDynamic}</div>`;
+  $('#hd0').innerHTML = `<div class="ro-wrap"><div class="ro-sec-title">Admission / Discharge / Death</div>${roFr('Admission E/C:', D.admissionEC)}${roFr('Admission C/C:', D.admissionCC)}${roFr('Discharge:', D.discharge)}${roFr('Death:', D.death)}${roFr('T/I Gen:', D.transferIn)}${roFr('T/O Gen:', D.transferOut)}${roFr('Total Patient:', D.totalPatientM)}${roFr('Empty Bed:', displayEmptyBeds(empty.count))}${roFr('Empty Bed Information:', formatEmptyBedEntries(legacyEmptyBedEntries(empty, state.ward)) || 'None')}${roFr('Early Bird(s):', D.earlyBirds.map(x => `${x.bed || '?'} -> ${x.dest || '?'}`).join(' | ') || 'None')}${admissionDynamic}</div>`;
 
   const infBuiltin = items.filter(i => i.section === 'infection' && i.builtin).map(i => roFr(`${i.label}:`, D.infBeds?.[i.key] || [])).join('');
   const infDynamic = dynamicRows(items, D, i => i.section === 'infection');

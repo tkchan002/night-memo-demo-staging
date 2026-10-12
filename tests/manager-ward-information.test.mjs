@@ -14,10 +14,10 @@ const managerPage = await read('pages/manager-page.js');
 const wardInfoDomain = await read('domain/manager-ward-information.js');
 
 test('Manager Ward Information uses separate source sections', () => {
-  assert.match(managerHtml, /Patient List/);
-  assert.match(managerHtml, /Consultation/);
-  assert.match(managerHtml, /Intubation/);
-  assert.doesNotMatch(managerHtml, /No configured Additional Report Items/);
+  assert.match(managerPage, /renderWardInfoSection\('Patient List'/);
+  assert.match(managerPage, /renderWardInfoSection\('Consultation'/);
+  assert.match(managerPage, /renderWardInfoSection\('Intubation'/);
+  assert.match(managerPage, /renderWardInfoSection\('Additional Report Items'/);
 
   assert.doesNotMatch(managerHtml, /Clinical \/ General Information/);
 });
@@ -36,11 +36,9 @@ test('Manager Ward Information is backed by a dedicated domain model', () => {
 
 test('Manager page does not recreate Ward data as a combined narrative', () => {
   assert.doesNotMatch(managerPage, /Clinical \/ General Information/);
-  // Only legacy fields are removed from the official memo object.
-  // They are not used to re-create a combined clinical narrative.
-  assert.match(managerPage, /clinicalNotesHtml: _legacyClinical/);
+  assert.doesNotMatch(managerPage, /renderWardInfoSection\('Clinical \/ General Information'/);
   assert.match(managerPage, /additionalItemsHtml: _legacyAdditional/);
-  assert.match(managerPage, /buildManagerWardInformation/);
+  assert.match(managerPage, /renderWardInfoSection\('Additional Report Items'/);
 });
 
 test('Ward Information remains read-only source data', () => {

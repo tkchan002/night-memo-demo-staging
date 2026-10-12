@@ -1,21 +1,13 @@
-import { addDaysISO, todayISO, toDisplayDate, REPORT_TIME_ZONE } from '../core/dates.js';
+import { addDaysISO, todayISO, toDisplayDate } from '../core/dates.js';
 import { deviceCount, normalizeDevice, normalizeReportPayload } from './report-model.js';
 import { reportSubmittedAt } from './report-session.js';
 import { reportNightDate, combinedMovementValue, missingMemoTypes } from './report-cycle.js';
 import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './empty-bed-reporting.js';
+import { resolveReportEmptyBeds, displayEmptyBeds } from './bed-occupancy.js';
 
 export function reportingNightDate(now = new Date()) { return reportNightDate(now); }
 
-export function managerSubmissionStatus(report) {
-  if (!report) return { state: 'missing', label: 'Not submitted', time: '' };
-  const stamp = reportSubmittedAt(report);
-  if (!stamp) return { state: 'submitted', label: 'Submitted', time: '' };
-  const time = new Date(stamp).toLocaleTimeString('en-GB', {
-    timeZone: REPORT_TIME_ZONE,
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  });
-  return { state: 'submitted', label: `Submitted ${time}`, time };
-}
+export { managerSubmissionStatus } from './submission-status.js';
 
 function fixedGender(ward) {
   if (ward?.empty_bed_gender_mode === 'male') return 'M';
@@ -23,22 +15,23 @@ function fixedGender(ward) {
   return '';
 }
 
-export function formatManagerEmptyBeds(ward, report, capacity = 0) {
+export function formatManagerEmptyBeds(ward, report, capacity = null) {
   if (!report) return '—';
   const D = normalizeReportPayload(report.payload);
-  const empty = D.emptyBeds || { count: Math.max(0, Number(capacity || 0) - Number(D.totalPatientM || 0)), details: [] };
-  const count = Math.max(0, Number(empty.count || 0));
+  const empty = D.emptyBeds;
+  const count = resolveReportEmptyBeds({ report, capacity });
+  const countText = displayEmptyBeds(count);
   if (Array.isArray(empty.entries)) {
     const manual = formatEmptyBedEntries(empty.entries);
-    return String(count) + (manual ? ' (' + manual + ')' : '');
+    return countText + (manual ? ' (' + manual + ')' : '');
   }
   if (empty.reported) {
     const manual = formatEmptyBedEntries(legacyEmptyBedEntries(empty, ward)) || formatEmptyBedReporting(empty.reported, { includeMissing: true });
-    return String(count) + (manual ? ' (' + manual + ')' : '');
+    return countText + (manual ? ' (' + manual + ')' : '');
   }
   const details = Array.isArray(empty.details) ? empty.details : [];
   const defaultGender = fixedGender(ward);
-  if (!details.length) return `${count}${defaultGender}` || '0';
+  if (!details.length) return `${countText}${count === null ? '' : defaultGender}`;
 
   const special = [];
   const ordinary = { M: 0, F: 0, U: 0 };
@@ -50,7 +43,7 @@ export function formatManagerEmptyBeds(ward, report, capacity = 0) {
     else ordinary[g] += 1;
   }
   const accounted = details.length;
-  if (count > accounted) {
+  if (count !== null && count > accounted) {
     const g = defaultGender || 'U';
     ordinary[g] = (ordinary[g] || 0) + (count - accounted);
   }
@@ -59,7 +52,7 @@ export function formatManagerEmptyBeds(ward, report, capacity = 0) {
   if (ordinary.F) parts.push(`${ordinary.F}F`);
   if (ordinary.U) parts.push(`${ordinary.U}U`);
   parts.push(...special);
-  return parts.length ? parts.join(', ') : String(count);
+  return parts.length ? parts.join(', ') : countText;
 }
 
 function bedList(value) {

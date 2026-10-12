@@ -28,7 +28,13 @@
 .submission-table{width:100%;border-collapse:collapse;font-size:.85rem}
 .submission-table th,.submission-table td{border:1px solid #bdbdb6;padding:6px 8px;text-align:left}
 .submission-table th{position:sticky;top:0;background:linear-gradient(to bottom,#fff,#d4d3d3);z-index:1;font-weight:700}
-.submission-table tr.submitted td{background:#f2fff2}.submission-table tr.missing td{background:#fff0ee}.submission-table tr.newer td{background:#fff8d7}
+/* Ward rows are neutral; PM and Night submissions carry independent status. */
+.submission-table tbody tr td{background:#fff;}
+.submission-table tbody tr:nth-child(even) td{background:#f3f3f0;}
+.memo-status{font-weight:700;white-space:normal;}
+.memo-status--submitted{color:#126b35;}
+.memo-status--missing{color:#b02222;}
+
 .source-change-notice{padding:8px 12px;background:#fff4c2;border-bottom:1px solid #c9b95c;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 
 .memo-workspace-panel{padding:0}.memo-workspace-head{padding:8px 10px}.workspace-summary{padding:14px 16px 8px;display:grid;gap:5px;font-size:.9rem}.workspace-summary .workspace-state{font-weight:800;font-size:1rem;color:var(--legacy-blue)}.workspace-summary .workspace-meta{color:#4d535a}.workspace-actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 14px}.workspace-empty{color:#555}

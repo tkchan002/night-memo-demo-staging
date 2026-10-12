@@ -73,6 +73,16 @@ export function makeEmptyBedReporting({ male = null, female = null, single = nul
 /** V2: One ordered manual-entry list. Never reconciled with total empty beds. */
 export const EMPTY_BED_ENTRY_DESIGNATIONS = Object.freeze(['M', 'F', 'S', 'D', 'T', 'OTHER']);
 
+/** Reporting categories are separate from the legacy S/D availability switch. */
+export function availableEmptyBedDesignations(ward = {}, previouslySaved = '') {
+  const codes = ward?.single_double_reporting_enabled === true
+    ? [...EMPTY_BED_ENTRY_DESIGNATIONS]
+    : EMPTY_BED_ENTRY_DESIGNATIONS.filter(code => code !== 'S' && code !== 'D');
+  const previous = String(previouslySaved || '').trim().toUpperCase();
+  if (EMPTY_BED_ENTRY_DESIGNATIONS.includes(previous) && !codes.includes(previous)) codes.push(previous);
+  return codes;
+}
+
 export function parseEmptyBedLabel(label) {
   const match = String(label ?? '').trim().toUpperCase().match(/^([1-9]\d*)([MFSDT])$/);
   if (!match || !Number.isSafeInteger(Number(match[1]))) return null;

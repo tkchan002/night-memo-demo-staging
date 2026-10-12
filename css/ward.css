@@ -508,12 +508,36 @@
 .sex-admission{display:inline-flex;align-items:center;flex-wrap:wrap;gap:10px;}
 .sex-admission label{display:inline-flex;align-items:center;gap:4px;font-weight:600;white-space:nowrap;}
 #memoType{min-width:120px;}
-.empty-detail-row>.fc{gap:5px 8px;min-width:0;}
-.empty-detail-row [data-empty-remark]{max-width:100%;min-width:130px;}
-.empty-detail-row [data-empty-custom]{max-width:100%;min-width:110px;}
-@media(max-width:600px){
+/* Header and every generated row use one shared grid, not independent widths. */
+#emptyDetailBlock{min-width:0;max-width:100%;}
+.empty-detail-heading,.empty-detail-row{
+  --empty-entry-cols: 92px 112px minmax(0, 1fr) 34px;
+  display:grid;grid-template-columns:var(--empty-entry-cols);
+  gap:8px;align-items:center;max-width:740px;width:100%;
+}
+.empty-detail-heading{font-size:.88rem;font-weight:700;margin-bottom:4px;}
+.empty-detail-row{margin:4px 0;}
+.empty-detail-row .empty-field{min-width:0;display:flex;align-items:center;}
+.empty-detail-row .empty-field select,.empty-detail-row .empty-field input{
+  min-width:0;width:100%;max-width:none;height:34px;
+}
+.empty-detail-row .empty-field[hidden]{display:none;}
+.empty-detail-row .empty-custom{
+  grid-column:2 / 4;gap:8px;font-size:.85rem;flex-wrap:wrap;
+}
+.empty-detail-row .empty-custom input{flex:1;}
+.empty-detail-row .empty-remove{justify-self:start;align-self:center;}
+.empty-mobile-label{display:none;}
+@media(max-width:540px){
   .sex-admission{gap:8px 14px;}
-  .empty-detail-row>.fc{width:100%;}
-  .empty-detail-row [data-empty-remark]{flex:1 1 140px;width:auto;}
-  .empty-detail-row [data-empty-custom]{flex:1 1 120px;width:auto;}
+  .empty-detail-heading{display:none;}
+  .empty-detail-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;align-items:end;gap:6px 8px;}
+  .empty-detail-row .empty-field{display:flex;align-items:stretch;flex-direction:column;gap:2px;}
+  .empty-detail-row .empty-quantity{grid-column:1;grid-row:1;}
+  .empty-detail-row .empty-type{grid-column:2;grid-row:1;}
+  .empty-detail-row .empty-remove{grid-column:3;grid-row:1;}
+  .empty-detail-row .empty-remarks{grid-column:1 / -1;grid-row:2;}
+  .empty-detail-row .empty-custom{grid-column:1 / -1;grid-row:3;}
+  .empty-mobile-label{display:block;font-size:.8rem;font-weight:700;}
+  .empty-detail-row{padding:8px 0;border-bottom:1px solid #dddcd3;}
 }

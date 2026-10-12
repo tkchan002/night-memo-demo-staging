@@ -3,6 +3,7 @@
 
 import { formatEmptyBedReporting, formatEmptyBedEntries, legacyEmptyBedEntries } from './domain/empty-bed-reporting.js';
 import { openPrintView } from './services/print-job-service.js';
+import { resolveReportEmptyBeds, displayEmptyBeds } from './domain/bed-occupancy.js';
 const STORAGE_KEY = 'nightMemoPdfSettingsV1';
 
 export const DEFAULT_WARD_PRINT_SETTINGS = Object.freeze({
@@ -244,15 +245,14 @@ function memoNurseLines(D){
   return lines.join('');
 }
 
-function emptyBedInfo(D,ward,capacity){
-  const computed=Math.max(0,(Number(capacity)||0)-(Number(D.totalPatientM)||0));
-  const count=Number.isFinite(Number(D.emptyBeds?.count))?Number(D.emptyBeds.count):computed;
+function emptyBedInfo(D,ward,capacity,report){
+  const count=resolveReportEmptyBeds({report,capacity});
   const mode=ward?.empty_bed_gender_mode||'none';
   const prefix=(D.emptyBeds?.reported || Array.isArray(D.emptyBeds?.entries)) ? '' : (mode==='male'?'M ':mode==='female'?'F ':'');
   const labels=formatEmptyBedEntries(legacyEmptyBedEntries(D.emptyBeds,ward));
   const detailHtml=labels ? '<div class="empty-detail-note">'+escHtml(labels)+'</div>' : '';
   const manualHtml='';
-  return{count,prefix,detailHtml,manualHtml};
+  return{count:displayEmptyBeds(count),prefix,detailHtml,manualHtml};
 }
 
 function legacyFlowGenderPrefix(ward){
@@ -277,7 +277,7 @@ export function renderWardMemoHtml({ward,report,capacity,items=[],settings,logoU
   const F=memoFontSettings(S),density=memoDensityClass(D,items);
   const date=report?.report_date||D.date||'',fD=fmtDate(date);
   const totalPatient=D.totalPatientM||'0';
-  const empty=emptyBedInfo(D,ward,capacity);
+  const empty=emptyBedInfo(D,ward,capacity,report);
   // A typed memo can contain opposite-sex admissions even in a fixed-sex ward.
   // A historical male-ward memo retains its old labels for fidelity.
   const flowPrefix=D.admissionBySex ? '' : legacyFlowGenderPrefix(ward);

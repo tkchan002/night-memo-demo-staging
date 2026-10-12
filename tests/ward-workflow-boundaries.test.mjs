@@ -27,7 +27,7 @@ test('PM/Night editable form selects the exact typed report and draft', async ()
   const service = await read('services/report-service.js');
   assert.match(service, /db\.getWardCycleReport\(wardId, date, memoType\)/);
   assert.match(service, /db\.getWardCycleDraft\(wardId, date, memoType\)/);
-  assert.match(service, /return \{ operational, capacity: Number\(capacity\)/);
+  assert.match(service, /return \{ operational, capacity: capacity == null \? null : Number\(capacity\)/);
   assert.doesNotMatch(service, /currentWardSubmission\(/);
 });
 
