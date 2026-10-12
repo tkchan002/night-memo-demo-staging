@@ -49,7 +49,15 @@ test('ward access loads the canonical ward data without requiring a retired S/D 
   const { readFile } = await import('node:fs/promises');
   const { availableEmptyBedDesignations } = await import('../domain/empty-bed-reporting.js');
   const src = await readFile(new URL('../data/repositories/access-repository.js', import.meta.url), 'utf8');
-  assert.match(src, /wards\(id,name,phone,fax,empty_bed_gender_mode,display_order,active\)/);
+  // Validate the ward-access contract, not the formatting/order of SQL projection text.
+  const projection = src.match(/\.select\(\s*['"`]\*,\s*wards\(([^)]+)\)['"`]\s*\)/)?.[1];
+  assert.ok(projection, 'getCurrentAccess must explicitly select the related ward fields');
+  const selected = new Set(projection.split(',').map(column => column.trim()));
+  for (const required of ['id', 'name', 'phone', 'fax', 'empty_bed_gender_mode', 'display_order', 'active']) {
+    assert.ok(selected.has(required), `Ward access must select ${required}`);
+  }
+  assert.equal(selected.has('single_double_reporting_enabled'), false,
+    'Ward access must not depend on the retired S/D toggle');
   assert.deepEqual(availableEmptyBedDesignations({ empty_bed_gender_mode: 'male' }), ['M','F','S','D','T','OTHER']);
 });
 
