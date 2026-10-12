@@ -6,6 +6,7 @@ import { formatManagerEmptyBeds } from '../domain/manager-memo.js';
 import { normalizeReportPayload } from '../domain/report-model.js';
 import { validateReportPayload } from '../domain/report-validation.js';
 import { buildManagerWardInformation } from '../domain/manager-ward-information.js';
+import { emptyBedEntryMarkup } from '../components/empty-bed-entry.js';
 
 const entries = [
   { quantity: 1, designation: 'M', remark: 'TB' },
@@ -77,8 +78,11 @@ test('Ward reuses original row controls and Manager hides unconfigured additiona
   assert.match(html,/Optional Bed \/ Location Remarks/);
   assert.doesNotMatch(html,/id="emptyManualBlock"|id="ebReportM"/);
   assert.match(html,/class="btn-s" type="button" onclick="addEmptyDetail\(\)"/);
-  assert.match(ward,/class="btn-x" type="button" aria-label="Remove empty bed entry"/);
-  assert.match(ward,/single_double_reporting_enabled/);
+  const renderedRow = emptyBedEntryMarkup({ value: { quantity: 1, designation: 'M', remark: 'TB' } });
+  assert.match(renderedRow, /<button[^>]*class="btn-x empty-remove"[^>]*type="button"[^>]*aria-label="Remove empty bed entry"/);
+  assert.match(ward, /emptyBedEntryMarkup\(\{ value, ward: state\.ward/);
+  assert.match(ward, /\$\('\.btn-x', row\)\.onclick = \(\) => \{ row\.remove\(\); markDirty\(\); \}/);
+  assert.match(ward,/availableEmptyBedDesignations|emptyBedEntryMarkup/);
   assert.match(manager,/\$\{additional \? renderWardInfoSection\('Additional Report Items'/);
   assert.doesNotMatch(manager,/No configured Additional Report Items/);
 });

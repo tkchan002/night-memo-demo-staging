@@ -6,6 +6,7 @@ import {
   normalizeReportPayload,
 } from './report-model.js';
 import { wardRequiresPerBedGender } from './ward.js';
+import { availableEmptyBedDesignations } from './empty-bed-reporting.js';
 
 export const GENERATED_DEMO_FORMAT = 'night-memo-generated-v2';
 
@@ -276,15 +277,20 @@ function directValue(item, preferred, rng, scenario) {
   return String(preferred);
 }
 
-function emptyBedDetails(ward, emptyCount, rng) {
-  if (!wardRequiresPerBedGender(ward) || emptyCount <= 0) return [];
-  const count = Math.min(emptyCount, chance(rng, 0.35) ? 2 : 1);
-  const remarks = ['D room', 'TB', 'HZ', 'Side room'];
-  return Array.from({ length: count }, (_, index) => ({
-    location: String(Math.max(1, asNumber(ward.capacity, 40) - index)),
-    gender: index % 2 === 0 ? 'M' : 'F',
-    remark: remarks[index % remarks.length],
-  }));
+function demoEmptyBedEntries(ward, rng) {
+  // Manual reporting entries are annotations, not a breakdown of empty beds.
+  // Generate non-overlapping demo examples regardless of ward occupancy.
+  const available = availableEmptyBedDesignations(ward);
+  const entries = [
+    { quantity: 1, designation: 'M', remark: 'TB' },
+    { quantity: 1, designation: 'M', remark: 'HZV' },
+    { quantity: 1, designation: 'T', remark: '' },
+  ];
+  if (available.includes('S')) entries.push({ quantity: 1, designation: 'S', remark: '' });
+  if (available.includes('D')) entries.push({ quantity: 1, designation: 'D', remark: '' });
+  // Exercise optional free-text designation without inserting real patient data.
+  if (chance(rng, 0.2)) entries.push({ quantity: 1, designation: 'OTHER', customDesignation: 'Demo', remark: '' });
+  return entries;
 }
 
 function clinicalRows({ ward, capacity, rng, scenario, currentSession }) {
@@ -349,14 +355,14 @@ function buildSessionPayload({ ward, capacity, items, staffByWard, rng, scenario
   }
   payload.totalPatientM = directValue(itemByKey.get('totalPatientM'), total, rng, scenario);
 
-  // Empty-bed count follows actual capacity, not the configured dropdown value.
-  // Mixed wards receive the same location/gender/remark structure entered in Ward.
+  // Empty-bed count follows actual capacity; manual entries remain separate.
   const actualTotal = clamp(asNumber(payload.totalPatientM, total), 0, cap);
   payload.totalPatientM = String(actualTotal);
   const emptyCount = cap - actualTotal;
   payload.emptyBeds = {
     count: emptyCount,
-    details: emptyBedDetails({ ...ward, capacity: cap }, emptyCount, rng),
+    version: 2,
+    entries: demoEmptyBedEntries(ward, rng),
   };
 
   const occupiedBeds = Math.max(1, actualTotal);
@@ -493,7 +499,7 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
     const target = reports.find(report => report.session === 'previous') || primary;
     const cap = Math.max(1, Number(target.preview_capacity) || 1);
     target.payload.totalPatientM = String(Math.max(0, cap - 1));
-    target.payload.emptyBeds = { count: 1, details: [] };
+    target.payload.emptyBeds = { ...target.payload.emptyBeds, count: 1 };
     removeBedFromPayload(target.payload, String(cap));
   }
 
@@ -557,21 +563,8 @@ function ensureCoreCoverage(reports, activeWards, staffByWard, items, rng) {
     }
   }
 
-  const mixedWard = activeWards.find(wardRequiresPerBedGender);
-  if (mixedWard) {
-    const target = targetCurrentReport(reports, mixedWard.name);
-    if (target && !target.payload.emptyBeds?.details?.length) {
-      const cap = Math.max(1, Number(target.preview_capacity) || 1);
-      let total = clamp(asNumber(target.payload.totalPatientM, cap - 1), 0, cap);
-      if (total >= cap) total = Math.max(0, cap - 1);
-      target.payload.totalPatientM = String(total);
-      target.payload.emptyBeds = {
-        count: Math.max(1, cap - total),
-        details: [{ location: String(cap), gender: 'M', remark: 'D room' }],
-      };
-      removeBedFromPayload(target.payload, String(cap));
-    }
-  }
+  // The modern manual entry list is independent of capacity, so no
+  // mixed-ward occupancy manipulation is necessary for annotation coverage.
 }
 
 function ensureConfiguredItemCoverage(reports, items, rng) {
@@ -662,7 +655,10 @@ function buildCoverageSummary(reports, items, activeWards, staffByWard) {
     night_runner: reports.some(report => report.payload.nurses?.some(nurse => nurse.runner)),
     free_text_nurse: reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'free_text')),
     ward_staff_nurse: staffApplicable ? reports.some(report => report.payload.nurses?.some(nurse => nurse.source === 'ward_staff')) : null,
-    mixed_empty_bed_detail: mixedApplicable ? reports.some(report => report.payload.emptyBeds?.details?.some(detail => detail.location && detail.gender && detail.remark)) : null,
+    mixed_empty_bed_detail: mixedApplicable ? reports.some(report => report.payload.emptyBeds?.entries?.some(entry => entry.designation === 'M' && entry.remark)) : null,
+    manual_empty_bed_sd: activeWards.some(ward => availableEmptyBedDesignations(ward).includes('S'))
+      ? reports.some(report => report.payload.emptyBeds?.entries?.some(entry => entry.designation === 'S'))
+      : null,
     signature: reports.some(report => report.payload.sigRank && report.payload.sigName && report.payload.sigAppt),
     staffing_counts: reports.every(report => /^\d+(?:\.5)?$/.test(String(report.payload.staffAM)) && /^\d+(?:\.5)?$/.test(String(report.payload.staffPM))),
     bed_or_count_beds_mode: hasBedOrCount ? bedOrCountValues.some(value => value?.mode === 'beds' && asArray(value.beds).length) : null,
@@ -754,7 +750,7 @@ export function generateDemoDataBundle({
     scenario,
     seed: Number(seed),
     generated_at: new Date(now).toISOString(),
-    generator_version: 2,
+    generator_version: 4,
     description: `${config.label}: ${activeWards.length} active wards, ${currentReports.length} current submissions, ${activeWards.length - currentReports.length} not yet submitted in the current window.`,
     meta: {
       active_wards: activeWards.length,

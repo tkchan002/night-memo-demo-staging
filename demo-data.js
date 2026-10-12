@@ -10,7 +10,7 @@ export const DEMO_WARDS = [
   {name:'G10', phone:'5834', fax:'1153', empty_bed_gender_mode:'male', display_order:7, capacity:40},
   {name:'G11', phone:'6624', fax:'4882', empty_bed_gender_mode:'mixed', single_double_reporting_enabled:true, display_order:8, capacity:40},
   {name:'B10', phone:'4662', fax:'8510', empty_bed_gender_mode:'male', display_order:9, capacity:40},
-  {name:'H6',  phone:'1075', fax:'2810', empty_bed_gender_mode:'mixed', display_order:10, capacity:36},
+  {name:'H6',  phone:'1075', fax:'2810', empty_bed_gender_mode:'mixed', single_double_reporting_enabled:false, display_order:10, capacity:36},
 ];
 
 const range = (n=30) => Array.from({length:n+1}, (_,i)=>String(i));
@@ -48,20 +48,19 @@ export const DEMO_STAFF = DEMO_WARDS.flatMap((w, idx) => [
 function samplePayload(ward, i) {
   const capacity = ward.capacity;
   const total = capacity - (i % 5);
-  const kind = ward.empty_bed_gender_mode === 'female' ? 'F' : 'M';
   const entries = [
-    { quantity: 1, designation: kind, remark: 'TB' },
-    { quantity: 1, designation: kind, remark: 'HZV' },
+    {quantity:1, designation:'M', remark:'TB'},
+    {quantity:1, designation:'M', remark:'HZV'},
+    {quantity:1, designation:'T', remark:''},
+    ...(ward.single_double_reporting_enabled === true ? [
+      {quantity:1, designation:'S', remark:''},
+      {quantity:1, designation:'D', remark:''},
+    ] : []),
   ];
-  if (ward.empty_bed_gender_mode === 'mixed') entries.push({ quantity: 1, designation: 'F', remark: '' });
-  if (ward.single_double_reporting_enabled === true) {
-    entries.push({ quantity: 1, designation: 'S', remark: '' });
-    entries.push({ quantity: 1, designation: 'D', remark: '' });
-  }
   return {
     admissionEC:String((i*3+2)%11), admissionCC:String(i%3), discharge:String((i*2+3)%10), death:String(i%2),
     transferIn:String(i%4), transferOut:String((i+1)%4), totalPatientM:String(total),
-    emptyBeds:{ count:capacity-total, entries },
+    emptyBeds:{count:capacity-total, version:2, entries},
     earlyBirds:i%3===0?[{bed:String(10+i),dest:'Rehab'}]:[],
     infBeds:{iCRE:i%4===0?[32]:[],iVRE:[],iCOV:[],iMDR:[],iCD:[],iInf:i%5===0?[12]:[],iCA:[]},
     devBeds:{dMV:{mode:'beds',count:0,beds:i%2===0?[11]:[]},dNIV:{mode:'beds',count:0,beds:i%3===0?[21]:[]},dHF:{mode:'beds',count:0,beds:[]},dHD:{mode:'count',count:i%2,beds:[]},dCA:{mode:'beds',count:0,beds:[]}},

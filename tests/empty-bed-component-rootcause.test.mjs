@@ -23,11 +23,14 @@ test('component keeps records larger than current capacity and escapes unsafe re
 test('S and D visibility respects Maintenance; T and Other are independent', () => {
   const noSd = emptyBedEntryMarkup({ ward: { single_double_reporting_enabled: false } });
   const yesSd = emptyBedEntryMarkup({ ward: { single_double_reporting_enabled: true } });
+  const currentWard = emptyBedEntryMarkup({ ward: { empty_bed_gender_mode: 'male' } });
   assert.match(noSd, /<option value="T">T<\/option>/);
   assert.match(noSd, /<option value="OTHER">Other<\/option>/);
   assert.doesNotMatch(noSd, /<option value="S">S<\/option>/);
   assert.match(yesSd, /<option value="S">S<\/option>/);
   assert.match(yesSd, /<option value="D">D<\/option>/);
+  assert.match(currentWard, /<option value="S">S<\/option>/);
+  assert.match(currentWard, /<option value="D">D<\/option>/);
 });
 
 test('mobile form has separate input labels and media-query breakpoints', async () => {

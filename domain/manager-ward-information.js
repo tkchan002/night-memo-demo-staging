@@ -48,7 +48,7 @@ function additionalItems(report, fallbackItems) {
     : (fallbackItems || []);
 
   return [...definitions]
-    .filter(item => !item.builtin && !['admission', 'bedcount', 'infection', 'devices'].includes(item.section))
+    .filter(item => !item.builtin && item.section === 'additional')
     .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
     .map(item => ({
       key: item.key,

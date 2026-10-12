@@ -34,6 +34,7 @@ test('number select includes capacity range and preserves previously stored larg
 test('T and Other do not depend on the legacy S/D toggle; old S/D remains readable', () => {
   assert.deepEqual(availableEmptyBedDesignations({ single_double_reporting_enabled: false }), ['M','F','T','OTHER']);
   assert.deepEqual(availableEmptyBedDesignations({ single_double_reporting_enabled: true }), ['M','F','S','D','T','OTHER']);
+  assert.deepEqual(availableEmptyBedDesignations({}), ['M','F','S','D','T','OTHER']);
   assert.deepEqual(availableEmptyBedDesignations({ single_double_reporting_enabled: false }, 'S'), ['M','F','T','OTHER','S']);
   assert.match(entry, /availableEmptyBedDesignations\(ward, savedCode\)/);
   assert.doesNotMatch(ward, /\['S','D','T','OTHER'\]\.includes/);

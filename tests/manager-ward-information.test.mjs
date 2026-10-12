@@ -49,3 +49,17 @@ test('Ward Information remains read-only source data', () => {
 test('Additional Report Items preserve historical report definitions', () => {
   assert.match(wardInfoDomain, /report_item_snapshot/);
 });
+
+test('only items in the additional section appear in Additional Report Items', async () => {
+  const { buildManagerWardInformation } = await import('../domain/manager-ward-information.js');
+  const ward = { id: 'ward-a', name: 'A' };
+  const definitions = [
+    { key: 'infection', label: 'Infection', section: 'infection', builtin: false },
+    { key: 'devices', label: 'Device', section: 'devices', builtin: false },
+    { key: 'notes', label: 'Custom notes', section: 'additional', builtin: false },
+    { key: 'builtin', label: 'Built in', section: 'additional', builtin: true },
+  ];
+  const report = { payload: { dynamicItems: { infection: 'CRE', devices: 'MV', notes: 'Required', builtin: 'N/A' } }, report_item_snapshot: definitions };
+  const [row] = buildManagerWardInformation({ wards: [ward], bundle: [{ ward, report }] });
+  assert.deepEqual(row.additionalItems.map(item => item.key), ['notes']);
+});

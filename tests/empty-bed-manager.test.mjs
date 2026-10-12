@@ -45,17 +45,22 @@ test('Ward PDF source renders independently entered counts, including S/D', asyn
 });
 
 
-test('ward access query includes S/D configuration for conditional controls', async () => {
+test('ward access loads the canonical ward data without requiring a retired S/D column', async () => {
   const { readFile } = await import('node:fs/promises');
+  const { availableEmptyBedDesignations } = await import('../domain/empty-bed-reporting.js');
   const src = await readFile(new URL('../data/repositories/access-repository.js', import.meta.url), 'utf8');
-  assert.match(src, /wards\(id,name,phone,fax,empty_bed_gender_mode,single_double_reporting_enabled,/);
+  assert.match(src, /wards\(id,name,phone,fax,empty_bed_gender_mode,display_order,active\)/);
+  assert.deepEqual(availableEmptyBedDesignations({ empty_bed_gender_mode: 'male' }), ['M','F','S','D','T','OTHER']);
 });
 
-test('S/D is persisted with the ward, not as a generic Report Item', async () => {
+test('Ward collects reusable optional reporting entries and calculates bed count independently', async () => {
   const { readFile } = await import('node:fs/promises');
-  const maint = await readFile(new URL('../pages/maintenance-page.js', import.meta.url), 'utf8');
+  const { emptyBedEntryMarkup } = await import('../components/empty-bed-entry.js');
   const ward = await readFile(new URL('../pages/ward-page.js', import.meta.url), 'utf8');
-  assert.match(maint, /single_double_reporting_enabled: \$\('#mWardSingleDouble'\)\.checked/);
+  const html = emptyBedEntryMarkup({ value: { quantity: 2, designation: 'D', remark: 'TB' } });
+  assert.match(html, /data-empty-quantity/);
+  assert.match(html, /data-empty-designation/);
+  assert.match(html, /data-empty-remark/);
   assert.match(ward, /collectEmptyDetails/);
   assert.match(ward, /count: calcEmpty\(\)/);
 });

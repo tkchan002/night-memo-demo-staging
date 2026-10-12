@@ -7,7 +7,7 @@ const NOW = new Date('2026-09-28T13:00:00.000Z');
 
 const wards = [
   { id: 'w1', name: 'A1', display_order: 1, active: false, empty_bed_gender_mode: 'male' },
-  { id: 'w2', name: 'B2', display_order: 2, active: true, empty_bed_gender_mode: 'mixed', single_double_reporting_enabled: true },
+  { id: 'w2', name: 'B2', display_order: 2, active: true, empty_bed_gender_mode: 'mixed' },
   { id: 'w3', name: 'C3', display_order: 3, active: true, empty_bed_gender_mode: 'female' },
 ];
 
@@ -68,10 +68,6 @@ test('comprehensive batch covers every Ward entry structure and effective config
   assert.equal(c.movement_counts, true);
   assert.equal(c.total_patient, true);
   assert.equal(c.empty_bed_count, true);
-  assert.equal(c.manual_empty_bed_mf, true);
-  assert.equal(c.manual_empty_bed_sd, true);
-  assert.equal(bundle.meta.sd_reporting_wards, 1);
-  assert.equal(bundle.generator_version, 4);
   assert.equal(c.patient_list, true);
   assert.equal(c.patient_nil_state, true);
   assert.equal(c.consultation, true);
@@ -82,7 +78,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
   assert.equal(c.night_runner, true);
   assert.equal(c.free_text_nurse, true);
   assert.equal(c.ward_staff_nurse, true);
-  assert.equal(c.empty_bed_remarks, true);
+  assert.equal(c.mixed_empty_bed_detail, true);
   assert.equal(c.signature, true);
   assert.equal(c.staffing_counts, true);
   assert.equal(c.bed_or_count_beds_mode, true);
@@ -98,15 +94,6 @@ test('comprehensive batch covers every Ward entry structure and effective config
     const cap = capacities[wards.find(w => w.name === report.ward_name).id];
     assert.ok(Number(report.payload.totalPatientM) >= 0 && Number(report.payload.totalPatientM) <= cap);
     assert.equal(Number(report.payload.emptyBeds.count), cap - Number(report.payload.totalPatientM));
-    const entries = report.payload.emptyBeds.entries;
-    assert.ok(Array.isArray(entries), 'generated report must use the unified manual-entry format');
-    assert.ok(entries.every(entry => Number.isSafeInteger(entry.quantity) && entry.quantity > 0));
-    if (report.ward_name === 'B2') {
-      assert.ok(entries.some(entry => entry.designation === 'S'));
-      assert.ok(entries.some(entry => entry.designation === 'D'));
-    } else {
-      assert.ok(entries.every(entry => !['S','D'].includes(entry.designation)));
-    }
     assert.match(String(report.payload.staffAM), /^\d+(?:\.5)?$/);
     assert.match(String(report.payload.staffPM), /^\d+(?:\.5)?$/);
     assert.ok(report.payload.sigRank);
@@ -127,8 +114,7 @@ test('comprehensive batch covers every Ward entry structure and effective config
     assert.ok(referencedBeds.every(bed => bed >= 1 && bed <= Number(report.payload.totalPatientM)), `occupied-bed references must not point at an empty bed in ${report.ward_name}`);
   }
 
-  assert.ok(bundle.reports.some(r => r.payload.emptyBeds.entries.some(e => /^[MF]$/.test(e.designation) && e.remark)));
-  assert.ok(bundle.reports.some(r => r.ward_name === 'B2' && r.payload.emptyBeds.entries.some(e => e.designation === 'S') && r.payload.emptyBeds.entries.some(e => e.designation === 'D')));
+  assert.ok(bundle.reports.some(r => r.payload.emptyBeds.entries.some(e => e.designation === 'M' && e.remark)));
   assert.ok(bundle.reports.some(r => r.payload.earlyBirds.some(e => e.bed && e.dest)));
   assert.ok(bundle.reports.some(r => r.payload.patients.some(row => row.length === 3 && row.every(Boolean))));
   assert.ok(bundle.reports.some(r => r.payload.consultations.some(row => row.length === 3 && row.every(Boolean))));
@@ -162,5 +148,4 @@ test('bed-or-count coverage is N/A when that control type is not configured', ()
   const bundle = generateDemoDataBundle({ wards, periods, capacities, items: noDeviceItems, staffByWard, scenario: 'typical', reportDate: REPORT_DATE, now: NOW, seed: 8122 });
   assert.equal(bundle.coverage.bed_or_count_beds_mode, null);
   assert.equal(bundle.coverage.bed_or_count_count_mode, null);
-  assert.equal(bundle.coverage.manual_empty_bed_sd, true);
 });

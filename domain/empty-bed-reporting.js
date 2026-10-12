@@ -75,9 +75,12 @@ export const EMPTY_BED_ENTRY_DESIGNATIONS = Object.freeze(['M', 'F', 'S', 'D', '
 
 /** Reporting categories are separate from the legacy S/D availability switch. */
 export function availableEmptyBedDesignations(ward = {}, previouslySaved = '') {
-  const codes = ward?.single_double_reporting_enabled === true
-    ? [...EMPTY_BED_ENTRY_DESIGNATIONS]
-    : EMPTY_BED_ENTRY_DESIGNATIONS.filter(code => code !== 'S' && code !== 'D');
+  // All supported designations are available in the current ward schema.
+  // Explicit legacy false is honoured for old ward objects, but an absent
+  // flag must not accidentally hide S/D after the field was retired.
+  const codes = ward?.single_double_reporting_enabled === false
+    ? EMPTY_BED_ENTRY_DESIGNATIONS.filter(code => code !== 'S' && code !== 'D')
+    : [...EMPTY_BED_ENTRY_DESIGNATIONS];
   const previous = String(previouslySaved || '').trim().toUpperCase();
   if (EMPTY_BED_ENTRY_DESIGNATIONS.includes(previous) && !codes.includes(previous)) codes.push(previous);
   return codes;
