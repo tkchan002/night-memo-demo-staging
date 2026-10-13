@@ -28,7 +28,8 @@ test('number select includes capacity range and preserves previously stored larg
   assert.match(entry, /for \(let number = 1; number <= maxNumber; number \+= 1\)/);
   assert.match(ward, /\$\('\[data-empty-quantity\]', row\)\.value = savedNumber/);
   assert.match(ward, /quantity: number \? Number\(number\) : null/);
-  assert.match(ward, /if \(!number && !designation && !remark && !customDesignation\) return null/);
+  assert.match(ward, /if \(!number && !designation && !remark\) return null/);
+  assert.match(ward, /designation === 'OTHER' \? \$\('\[data-empty-custom\]', row\)\.value\.trim\(\) : ''/);
 });
 
 test('T and Other do not depend on the legacy S/D toggle; old S/D remains readable', () => {

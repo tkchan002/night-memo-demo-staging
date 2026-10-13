@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { emptyBedEntryMarkup } from '../components/empty-bed-entry.js';
 
-test('component has three labelled controls with stable grid classes and separate Other', () => {
+test('Other uses the same Type grid cell, with one inline text field and back button', () => {
   const html = emptyBedEntryMarkup({ value: { quantity: 3, designation: 'OTHER', customDesignation: 'Isolation', remark: 'tpa' }, numberCeiling: 30 });
   assert.match(html, /class="empty-field empty-quantity"/);
   assert.match(html, /class="empty-field empty-type"/);
   assert.match(html, /class="empty-field empty-remarks"/);
-  assert.match(html, /class="empty-field empty-custom" hidden/);
+  assert.match(html, /class="empty-other-editor" hidden/);
+  assert.match(html, /data-empty-custom aria-label="Custom type"/);
+  assert.match(html, /data-empty-type-list type="button" aria-label="Back to type list"/);
+  assert.doesNotMatch(html, /class="empty-field empty-custom"/);
   assert.match(html, /value="Isolation"/);
   assert.match(html, /value="tpa"/);
   assert.match(html, /<option value="OTHER">Other<\/option>/);
@@ -37,6 +40,7 @@ test('mobile form has separate input labels and media-query breakpoints', async 
   const css = await readFile(new URL('../css/ward.css', import.meta.url), 'utf8');
   assert.match(css, /\.empty-detail-heading,\.empty-detail-row\{/);
   assert.match(css, /@media\(max-width:540px\)/);
+  assert.match(css, /\.empty-detail-row \.empty-other-editor\[hidden\]/);
   assert.match(css, /\.empty-detail-row \.empty-remarks\{grid-column:1 \/ -1;grid-row:2;/);
 });
 

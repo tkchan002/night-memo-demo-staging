@@ -511,7 +511,7 @@
 /* Header and every generated row use one shared grid, not independent widths. */
 #emptyDetailBlock{min-width:0;max-width:100%;}
 .empty-detail-heading,.empty-detail-row{
-  --empty-entry-cols: 92px 112px minmax(0, 1fr) 34px;
+  --empty-entry-cols: 92px 168px minmax(0, 1fr) 34px;
   display:grid;grid-template-columns:var(--empty-entry-cols);
   gap:8px;align-items:center;max-width:740px;width:100%;
 }
@@ -521,23 +521,28 @@
 .empty-detail-row .empty-field select,.empty-detail-row .empty-field input{
   min-width:0;width:100%;max-width:none;height:34px;
 }
-.empty-detail-row .empty-field[hidden]{display:none;}
-.empty-detail-row .empty-custom{
-  grid-column:2 / 4;gap:8px;font-size:.85rem;flex-wrap:wrap;
+.empty-detail-row .empty-type-controls{width:100%;min-width:0;}
+.empty-detail-row .empty-other-editor{display:flex;align-items:center;gap:4px;min-width:0;width:100%;}
+.empty-detail-row .empty-other-editor[hidden],.empty-detail-row [data-empty-designation][hidden]{display:none!important;}
+.empty-detail-row .empty-other-editor input{min-width:0;flex:1 1 auto;width:0;}
+.empty-detail-row .empty-type-back{
+  flex:0 0 auto;min-width:42px;height:34px;padding:0 5px;
+  font:inherit;font-size:.78rem;color:#344054;background:#f4f4ee;
+  border:1px solid #a5a59c;border-radius:3px;cursor:pointer;
 }
-.empty-detail-row .empty-custom input{flex:1;}
+.empty-detail-row .empty-type-back:hover{background:#e7e7df;}
+.empty-detail-row .empty-type-back:focus-visible{outline:2px solid #2457a8;outline-offset:2px;}
 .empty-detail-row .empty-remove{justify-self:start;align-self:center;}
 .empty-mobile-label{display:none;}
 @media(max-width:540px){
   .sex-admission{gap:8px 14px;}
   .empty-detail-heading{display:none;}
-  .empty-detail-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;align-items:end;gap:6px 8px;}
+  .empty-detail-row{grid-template-columns:minmax(76px,.7fr) minmax(0,1.3fr) 34px;align-items:end;gap:6px 8px;}
   .empty-detail-row .empty-field{display:flex;align-items:stretch;flex-direction:column;gap:2px;}
   .empty-detail-row .empty-quantity{grid-column:1;grid-row:1;}
   .empty-detail-row .empty-type{grid-column:2;grid-row:1;}
   .empty-detail-row .empty-remove{grid-column:3;grid-row:1;}
   .empty-detail-row .empty-remarks{grid-column:1 / -1;grid-row:2;}
-  .empty-detail-row .empty-custom{grid-column:1 / -1;grid-row:3;}
   .empty-mobile-label{display:block;font-size:.8rem;font-weight:700;}
   .empty-detail-row{padding:8px 0;border-bottom:1px solid #dddcd3;}
 }

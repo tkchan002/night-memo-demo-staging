@@ -17,7 +17,7 @@ import { calculateEmptyBeds, resolveReportEmptyBeds, displayEmptyBeds } from '..
 import { loadHistoricalReportContext, loadWardReportContext, loadWardSubmissionStatus, saveWardDraft, submitWardReport } from '../services/report-service.js';
 import { reportNightDate, defaultMemoType, MEMO_LABELS } from '../domain/report-cycle.js';
 import { openPrintView } from '../services/print-job-service.js';
-import { emptyBedEntryMarkup } from '../components/empty-bed-entry.js';
+import { emptyBedEntryMarkup, bindEmptyBedType } from '../components/empty-bed-entry.js';
 
 const $ = qs;
 const $$ = qsa;
@@ -319,11 +319,7 @@ function addEmptyDetail(value = {}) {
   const savedCode = String(value.designation ?? '').trim().toUpperCase();
   $('[data-empty-quantity]', row).value = savedNumber;
   $('[data-empty-designation]', row).value = savedCode;
-  const designationSelect = $('[data-empty-designation]', row);
-  const customField = $('.empty-custom', row);
-  const syncCustom = () => { customField.hidden = designationSelect.value !== 'OTHER'; };
-  designationSelect.addEventListener('change', syncCustom);
-  syncCustom();
+  bindEmptyBedType(row, { onBack: markDirty });
   $('.btn-x', row).onclick = () => { row.remove(); markDirty(); };
   $('#emptyDetailRows').append(row);
   markDirty();
@@ -333,8 +329,8 @@ function collectEmptyDetails() {
     const number = $('[data-empty-quantity]', row).value;
     const designation = $('[data-empty-designation]', row).value;
     const remark = $('[data-empty-remark]', row).value.trim();
-    const customDesignation = $('[data-empty-custom]', row).value.trim();
-    if (!number && !designation && !remark && !customDesignation) return null;
+    const customDesignation = designation === 'OTHER' ? $('[data-empty-custom]', row).value.trim() : '';
+    if (!number && !designation && !remark) return null;
     return { quantity: number ? Number(number) : null, designation, customDesignation, remark };
   }).filter(Boolean);
 }
